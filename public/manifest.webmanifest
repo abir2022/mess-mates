@@ -1,0 +1,25 @@
+{
+  "name": "Mess Mates — Mess Accounting & Guild Arena",
+  "short_name": "Mess Mates",
+  "description": "Track meals, bazar, deposits and dues for your shared mess — plus polls, bazar duty and guild games.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f7f9",
+  "theme_color": "#0d6963",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
