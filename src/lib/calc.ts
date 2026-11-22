@@ -16,6 +16,8 @@ export interface MemberSettlement {
   payable: number
   deposits: number
   bazarPaid: number
+  /** Net balance carried in from earlier months: negative means an unpaid due. */
+  carriedBalance: number
   balance: number
 }
 
@@ -33,6 +35,12 @@ export interface Settlement {
   members: MemberSettlement[]
   refundable: number
   due: number
+  /** Sum of all carried balances (positive credit + negative dues). */
+  carriedTotal: number
+  /** Unpaid dues rolled in from earlier months. */
+  carriedDue: number
+  /** Advance credit rolled in from earlier months. */
+  carriedAdvance: number
 }
 
 export function round2(value: number): number {
@@ -40,12 +48,37 @@ export function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
 }
 
-export function computeSettlement(workspace: Workspace, cycleId: string): Settlement {
+export interface SettlementOptions {
+  /** Include balances carried from earlier months. Off by default only while computing those months. */
+  carryForward?: boolean
+}
+
+/**
+ * Net balance each member brings in from every cycle that closed before this one.
+ * A member with no activity in earlier cycles simply carries 0.
+ */
+export function carriedBalances(workspace: Workspace, cycleId: string): Map<string, number> {
+  const totals = new Map<string, number>()
+  const current = workspace.cycles.find((cycle) => cycle.id === cycleId)
+  if (!current) return totals
+
+  const earlier = workspace.cycles.filter((cycle) => cycle.month_label < current.month_label)
+  for (const cycle of earlier) {
+    const figures = computeSettlement(workspace, cycle.id, { carryForward: false })
+    for (const member of figures.members) {
+      totals.set(member.userId, round2((totals.get(member.userId) ?? 0) + member.balance))
+    }
+  }
+  return totals
+}
+
+export function computeSettlement(workspace: Workspace, cycleId: string, options: SettlementOptions = {}): Settlement {
   const activeMembers = workspace.members.filter((member) => member.status === 'active')
   const meals = workspace.meals.filter((meal) => meal.cycle_id === cycleId)
   const bazar = workspace.bazar.filter((expense) => expense.cycle_id === cycleId)
   const utilities = workspace.utilities.filter((utility) => utility.cycle_id === cycleId)
   const deposits = workspace.deposits.filter((deposit) => deposit.cycle_id === cycleId)
+  const carried = options.carryForward === false ? new Map<string, number>() : carriedBalances(workspace, cycleId)
 
   const totalBazar = round2(
     bazar.filter((expense) => expense.status === 'approved').reduce((sum, expense) => sum + Number(expense.amount), 0),
@@ -83,7 +116,8 @@ export function computeSettlement(workspace: Workspace, cycleId: string): Settle
         .filter((expense) => expense.buyer_id === member.user_id && expense.status === 'approved')
         .reduce((sum, expense) => sum + Number(expense.amount), 0),
     )
-    const balance = round2(memberDeposits - payable)
+    const carriedBalance = round2(carried.get(member.user_id) ?? 0)
+    const balance = round2(memberDeposits + carriedBalance - payable)
     return {
       userId: member.user_id,
       name: member.profile.full_name || 'Member',
@@ -100,6 +134,7 @@ export function computeSettlement(workspace: Workspace, cycleId: string): Settle
       payable,
       deposits: memberDeposits,
       bazarPaid,
+      carriedBalance,
       balance,
     }
   })
@@ -123,6 +158,13 @@ export function computeSettlement(workspace: Workspace, cycleId: string): Settle
     members: [...members].sort((a, b) => a.name.localeCompare(b.name)),
     refundable,
     due,
+    carriedTotal: round2(members.reduce((sum, member) => sum + member.carriedBalance, 0)),
+    carriedDue: round2(
+      members.filter((member) => member.carriedBalance < 0).reduce((sum, member) => sum + Math.abs(member.carriedBalance), 0),
+    ),
+    carriedAdvance: round2(
+      members.filter((member) => member.carriedBalance > 0).reduce((sum, member) => sum + member.carriedBalance, 0),
+    ),
   }
 }
 

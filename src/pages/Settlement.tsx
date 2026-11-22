@@ -85,7 +85,7 @@ export function Settlement() {
         </div>
 
         <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[700px] text-xs">
+          <table className="w-full min-w-[760px] text-xs">
             <thead>
               <tr className="border-b border-ink-200 text-left">
                 <th className="py-2 pr-2 text-[10px] font-bold uppercase tracking-wide text-ink-400">Member</th>
@@ -98,6 +98,7 @@ export function Settlement() {
                 <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-ink-400">Utility</th>
                 <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-ink-400">Payable</th>
                 <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-ink-400">Deposits</th>
+                <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-ink-400">Carried</th>
                 <th className="pl-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide text-ink-400">Balance</th>
               </tr>
             </thead>
@@ -117,6 +118,9 @@ export function Settlement() {
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{money(member.utilityShare, symbol)}</td>
                   <td className="px-2 py-2 text-right font-semibold tabular-nums text-ink-800">{money(member.payable, symbol)}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{money(member.deposits, symbol)}</td>
+                  <td className={`px-2 py-2 text-right tabular-nums ${member.carriedBalance < 0 ? 'text-rose-600' : 'text-ink-600'}`}>
+                    {money(member.carriedBalance, symbol)}
+                  </td>
                   <td className={`py-2 pl-2 text-right font-extrabold tabular-nums ${member.balance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                     {money(member.balance, symbol)}
                   </td>
@@ -134,6 +138,7 @@ export function Settlement() {
                 <td className="px-2 py-2.5 text-right tabular-nums">{money(settlement.totalUtilities, symbol)}</td>
                 <td className="px-2 py-2.5 text-right tabular-nums">{money(settlement.totalPayable, symbol)}</td>
                 <td className="px-2 py-2.5 text-right tabular-nums">{money(settlement.totalDeposits, symbol)}</td>
+                <td className="px-2 py-2.5 text-right tabular-nums">{money(settlement.carriedTotal, symbol)}</td>
                 <td className="py-2.5 pl-2 text-right tabular-nums">{money(settlement.refundable - settlement.due, symbol)}</td>
               </tr>
             </tfoot>
@@ -145,6 +150,11 @@ export function Settlement() {
             <p className="text-[10px] font-bold uppercase tracking-wide text-rose-500">Total dues</p>
             <p className="text-lg font-extrabold tabular-nums text-rose-700">{money(settlement.due, symbol)}</p>
             <p className="mt-1 text-[10px] text-rose-500">Collect from members with a negative balance.</p>
+            {settlement.carriedDue > 0 ? (
+              <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
+                Includes {money(settlement.carriedDue, symbol)} carried over from earlier months.
+              </p>
+            ) : null}
           </div>
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">Total refundable</p>
@@ -157,7 +167,9 @@ export function Settlement() {
           <p className="font-bold uppercase tracking-wide text-ink-600">How this is calculated</p>
           <p className="mt-1">
             Meal rate = approved bazar ÷ total mess meals. Payable = member meals × meal rate + fixed utility share.
-            Balance = deposits − payable. Pending bazar is excluded until a manager approves it.
+            Balance = deposits + balance carried from earlier months − payable. An unpaid due from a previous month
+            carries forward automatically; an overpayment shows as credit. Pending bazar is excluded until a manager
+            approves it.
           </p>
         </div>
 

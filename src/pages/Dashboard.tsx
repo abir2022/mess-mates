@@ -205,6 +205,14 @@ export function Dashboard() {
                 <dt className="text-ink-500">Utility share</dt>
                 <dd className="font-bold tabular-nums text-ink-800">{money(me?.utilityShare ?? 0, symbol)}</dd>
               </div>
+              {me && Math.abs(me.carriedBalance) > 0.005 ? (
+                <div className="flex justify-between">
+                  <dt className="text-ink-500">{me.carriedBalance < 0 ? 'Carried dues' : 'Carried credit'}</dt>
+                  <dd className={`font-bold tabular-nums ${me.carriedBalance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                    {money(me.carriedBalance, symbol)}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex justify-between border-t border-dashed border-ink-100 pt-1.5">
                 <dt className="font-semibold text-ink-600">Total payable</dt>
                 <dd className="font-extrabold tabular-nums text-ink-900">{money(me?.payable ?? 0, symbol)}</dd>
