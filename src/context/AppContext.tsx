@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getBackend, type Backend } from '../lib/backend'
 import { computeSettlement, type Settlement } from '../lib/calc'
+import { outbox } from '../lib/outbox'
 import type { MonthlyCycle, Profile, Workspace } from '../lib/types'
 
 interface AppContextValue {
@@ -12,6 +13,8 @@ interface AppContextValue {
   cycleId: string | null
   ready: boolean
   busy: boolean
+  online: boolean
+  pending: number
   error: string | null
   notice: string | null
   setCycleId: (id: string) => void
@@ -19,6 +22,7 @@ interface AppContextValue {
   clearError: () => void
   refresh: () => Promise<void>
   run: (action: () => Promise<unknown>, successMessage?: string) => Promise<boolean>
+  syncNow: () => Promise<void>
   signInWithGoogle: () => Promise<void>
   signInWithEmail: (email: string) => Promise<boolean>
   signInDemo: () => Promise<void>
@@ -35,6 +39,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ws, setWs] = useState<Workspace | null>(null)
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [online, setOnline] = useState(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  )
+  const [pending, setPending] = useState(() => outbox.count())
   const [cycleId, setCycleId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -69,6 +77,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => setNotice(null), 3600)
     return () => clearTimeout(timer)
   }, [notice])
+
+  const syncNow = useCallback(async () => {
+    if (outbox.count() === 0) return
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setError('You are offline. Queued changes will sync when the connection is back.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await outbox.flush()
+      await refresh()
+      if (result.remaining > 0) {
+        setError(outbox.lastError() ?? 'Some changes could not sync yet. Please try again.')
+      } else if (result.synced > 0) {
+        setNotice(`${result.synced} queued change${result.synced === 1 ? '' : 's'} synced.`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sync your changes.')
+    } finally {
+      setBusy(false)
+      setPending(outbox.count())
+    }
+  }, [refresh])
+
+  useEffect(() => outbox.subscribe(() => setPending(outbox.count())), [])
+
+  useEffect(() => {
+    const goOnline = () => {
+      setOnline(true)
+      setPending(outbox.count())
+      if (outbox.count() > 0) void syncNow()
+    }
+    const goOffline = () => setOnline(false)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [syncNow])
 
   const run = useCallback(
     async (action: () => Promise<unknown>, successMessage?: string) => {
@@ -178,6 +227,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     cycleId,
     ready,
     busy,
+    online,
+    pending,
     error,
     notice,
     setCycleId,
@@ -185,6 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     clearError: () => setError(null),
     refresh,
     run,
+    syncNow,
     signInWithGoogle,
     signInWithEmail,
     signInDemo,

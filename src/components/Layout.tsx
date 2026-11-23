@@ -2,9 +2,11 @@ import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   AlarmClockCheck,
+  CloudOff,
   Crown,
   LayoutDashboard,
   LogOut,
+  RefreshCw,
   Sparkles,
   Trophy,
   Users,
@@ -24,7 +26,8 @@ const navItems = [
 ]
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const { ws, user, cycle, backend, signOut, notice, error, clearError, busy } = useApp()
+  const { ws, user, cycle, signOut, notice, error, clearError, busy, online, pending, syncNow } =
+    useApp()
   if (!ws || !user) return null
 
   const role = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
@@ -129,7 +132,32 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-8">{children}</main>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-8">
+          {!online || pending > 0 ? (
+            <div
+              className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-[11px] font-semibold ${
+                online ? 'bg-amber-50 text-amber-800' : 'bg-ink-900 text-white'
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {online ? <RefreshCw className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
+                {online
+                  ? `${pending} change${pending === 1 ? '' : 's'} waiting to sync`
+                  : `Offline — showing saved data${pending ? ` · ${pending} queued` : ''}`}
+              </span>
+              {online && pending > 0 ? (
+                <button
+                  onClick={() => void syncNow()}
+                  disabled={busy}
+                  className="rounded-lg bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
+                >
+                  Sync now
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {children}
+        </main>
 
         <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-ink-100 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-md items-stretch justify-around px-2">
