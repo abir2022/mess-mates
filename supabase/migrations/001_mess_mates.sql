@@ -629,7 +629,7 @@ join active_member am on am.cycle_id = c.id
 join public.profiles p on p.id = am.user_id
 left join cycle_bazar cb on cb.cycle_id = c.id
 left join cycle_meals cm on cm.cycle_id = c.id
-left join cycle_utilities cu on cu.cycle_id = c.id
+left join cycle_utility cu on cu.cycle_id = c.id
 left join member_count mc on mc.cycle_id = c.id
 left join member_meal ml on ml.cycle_id = c.id and ml.user_id = am.user_id
 left join member_deposit md on md.cycle_id = c.id and md.user_id = am.user_id;
