@@ -11,3 +11,4 @@ dist-ssr
 
 .vercel
 .env*
+client_secret_*.json

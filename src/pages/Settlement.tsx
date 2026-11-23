@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
 import { Pill } from '../components/ui'
 import { money, monthTitle } from '../lib/format'
+import { downloadSettlementPdf } from '../lib/pdf'
 
 export function Settlement() {
   const { ws, settlement, cycle, user } = useApp()
@@ -19,11 +20,22 @@ export function Settlement() {
 
   const brandedPdf = async () => {
     setBusy(true)
-    const ok = isPro ? true : await showAd('Generate the high-res branded month-end PDF')
-    setBusy(false)
-    if (!ok) return
-    setBranded(true)
-    setTimeout(() => window.print(), 250)
+    try {
+      const ok = isPro ? true : await showAd('Generate the high-res branded month-end PDF')
+      if (!ok) return
+      setBranded(true)
+      await downloadSettlementPdf({
+        messName: ws.mess.name,
+        monthLabel: monthTitle(cycle.month_label),
+        status: cycle.status === 'open' ? 'Live draft' : 'Finalised',
+        currencySymbol: symbol,
+        settlement,
+        generatedBy: nameOf(user.id),
+        branded: true,
+      })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
