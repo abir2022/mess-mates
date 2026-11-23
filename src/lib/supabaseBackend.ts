@@ -55,9 +55,26 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       avatar_frame: 'ring',
       frame_unlocked_until: null,
     }
+
     const { error: insertError } = await supabase.from('profiles').insert(profile)
-    if (insertError && !insertError.message.includes('duplicate')) throw new Error(insertError.message)
-    return profile
+    if (!insertError) return profile
+
+    if (insertError.code === '23505') {
+      const { data: existing } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+      if (existing) return existing as Profile
+    }
+
+    // A project migrated from an older schema can have extra required columns,
+    // so retry with the only columns every version has before giving up.
+    const fallbacks = [
+      () => supabase.from('profiles').insert({ id: profile.id, full_name: profile.full_name }),
+      () => supabase.from('profiles').insert({ id: profile.id }),
+    ]
+    for (const attempt of fallbacks) {
+      const { error: retryError } = await attempt()
+      if (!retryError) return profile
+    }
+    throw new Error(insertError.message)
   }
 
   async function requireContext() {
@@ -97,7 +114,10 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     mode: 'supabase',
 
     async currentUser() {
-      const { data } = await supabase.auth.getSession()
+      // getSession reports a failed OAuth redirect (e.g. the auth server could
+      // not create the user) instead of silently landing back on the login page.
+      const { data, error } = await supabase.auth.getSession()
+      if (error) throw new Error(error.message)
       if (!data.session?.user) return null
       return ensureProfile()
     },

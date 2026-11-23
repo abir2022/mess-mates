@@ -12,3 +12,6 @@ dist-ssr
 .vercel
 .env*
 client_secret_*.json
+
+# Supabase CLI local state
+supabase/.temp/
