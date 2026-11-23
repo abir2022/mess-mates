@@ -353,7 +353,21 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         reference: input.reference ?? '',
         proof_path: input.proofPath ?? null,
       })
-      if (error) throw new Error(error.message)
+      if (!error) return
+      // A database that has not run 002_hardening.sql yet has no payment columns;
+      // record the amount anyway instead of failing the deposit.
+      if (/column|schema cache|does not exist/i.test(error.message)) {
+        const legacy = await supabase.from('member_deposits').insert({
+          cycle_id: cycleId,
+          user_id: input.userId,
+          amount: input.amount,
+          paid_date: input.date,
+          note: input.note,
+        })
+        if (!legacy.error) return
+        throw new Error(legacy.error.message)
+      }
+      throw new Error(error.message)
     },
 
     async uploadDepositProof(file: File) {
