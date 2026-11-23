@@ -114,8 +114,16 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     mode: 'supabase',
 
     async currentUser() {
-      // getSession reports a failed OAuth redirect (e.g. the auth server could
-      // not create the user) instead of silently landing back on the login page.
+      // A failed OAuth redirect (e.g. the auth server could not create the user)
+      // is only reported by initialize(), otherwise we silently land back on the
+      // login page with no explanation.
+      const init = await supabase.auth.initialize()
+      if (init?.error) {
+        if (window.location.hash.includes('error')) {
+          window.history.replaceState(null, '', window.location.pathname)
+        }
+        throw new Error(init.error.message)
+      }
       const { data, error } = await supabase.auth.getSession()
       if (error) throw new Error(error.message)
       if (!data.session?.user) return null
