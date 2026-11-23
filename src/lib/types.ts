@@ -5,6 +5,7 @@ export type ExpenseStatus = 'pending' | 'approved'
 export type SplitType = 'equal' | 'custom'
 export type DutyStatus = 'upcoming' | 'completed' | 'missed'
 export type GameType = 'chess' | 'dice' | 'challenge'
+export type DepositMethod = 'cash' | 'bkash' | 'nagad' | 'bank' | 'other'
 
 export interface Profile {
   id: string
@@ -84,6 +85,9 @@ export interface MemberDeposit {
   amount: number
   paid_date: string
   note: string
+  method: DepositMethod
+  reference: string
+  proof_path: string | null
 }
 
 export interface BazarDuty {

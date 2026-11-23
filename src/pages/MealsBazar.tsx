@@ -7,6 +7,7 @@ import {
   CircleCheck,
   Clock,
   Lock,
+  Paperclip,
   Plus,
   Trash2,
   UtensilsCrossed,
@@ -14,9 +15,12 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { Avatar, Button, EmptyState, Pill, SectionHeading, Stepper, Tabs } from '../components/ui'
+import { depositMethods } from '../lib/backend'
 import { isMealLocked, mealTotal } from '../lib/calc'
 import { addDays, money, shortDate, todayISO, weekdayShort } from '../lib/format'
-import type { MealField } from '../lib/types'
+import type { DepositMethod, MealField } from '../lib/types'
+
+const MAX_PROOF_BYTES = 2 * 1024 * 1024
 
 type TabId = 'meals' | 'bazar' | 'utilities' | 'deposits'
 
@@ -413,12 +417,17 @@ function DepositsTab() {
   const [userId, setUserId] = useState(user?.id ?? '')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayISO())
+  const [method, setMethod] = useState<DepositMethod>('bkash')
+  const [reference, setReference] = useState('')
   const [note, setNote] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [fileKey, setFileKey] = useState(0)
 
   if (!ws || !user || !cycle) return null
   const symbol = ws.mess.currency_symbol
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
+  const locked = cycle.status === 'closed'
   const members = ws.members.filter((member) => member.status === 'active')
   const nameOf = (id: string) => members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
   const entries = ws.deposits
@@ -429,14 +438,39 @@ function DepositsTab() {
   const add = async () => {
     const value = Number(amount)
     if (!value || value <= 0 || !userId) return
-    const ok = await run(
-      () => backend.addDeposit({ userId, amount: value, date, note: note.trim() }),
-      'Deposit recorded',
-    )
+    if (file && file.size > MAX_PROOF_BYTES) {
+      await run(async () => {
+        throw new Error('That receipt is larger than 2 MB. Please attach a smaller screenshot.')
+      })
+      return
+    }
+    const ok = await run(async () => {
+      const proofPath = file ? await backend.uploadDepositProof(file) : null
+      await backend.addDeposit({
+        userId,
+        amount: value,
+        date,
+        note: note.trim(),
+        method,
+        reference: reference.trim(),
+        proofPath,
+      })
+    }, 'Deposit recorded')
     if (ok) {
       setAmount('')
+      setReference('')
       setNote('')
+      setFile(null)
+      setFileKey((key) => key + 1)
     }
+  }
+
+  const openProof = (path: string) => {
+    run(async () => {
+      const url = await backend.depositProofUrl(path)
+      if (!url) throw new Error('That receipt can no longer be opened.')
+      window.open(url, '_blank', 'noopener,noreferrer')
+    })
   }
 
   return (
@@ -472,11 +506,56 @@ function DepositsTab() {
               <input type="date" className="field" value={date} onChange={(event) => setDate(event.target.value)} />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label">Method</label>
+              <select className="field" value={method} onChange={(event) => setMethod(event.target.value as DepositMethod)}>
+                {depositMethods.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Txn reference</label>
+              <input
+                className="field"
+                placeholder={method === 'cash' ? 'Optional' : 'TrxID'}
+                value={reference}
+                onChange={(event) => setReference(event.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label">Receipt (optional)</label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-ink-200 bg-ink-50/60 px-3 py-2 text-[11px] font-semibold text-ink-500 hover:border-brand-300">
+              <Paperclip className="h-3.5 w-3.5" />
+              <span className="truncate">{file ? file.name : 'Attach a screenshot or PDF'}</span>
+              <input
+                key={fileKey}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
+                className="hidden"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
           <div>
             <label className="label">Note</label>
-            <input className="field" placeholder="Cash / bKash / bank" value={note} onChange={(event) => setNote(event.target.value)} />
+            <input className="field" placeholder="Paid to the manager" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
-          <Button className="w-full" disabled={!amount || !userId || busy} loading={busy} onClick={add}>
+          {locked ? (
+            <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] font-medium text-amber-800">
+              This cycle is closed, so deposits are read-only. Reopen the cycle or start a new month to record more.
+            </p>
+          ) : null}
+          <Button
+            className="w-full"
+            disabled={!amount || !userId || busy || locked}
+            loading={busy}
+            onClick={add}
+          >
             <Plus className="h-4 w-4" /> Add deposit
           </Button>
         </div>
@@ -490,13 +569,23 @@ function DepositsTab() {
         ) : (
           entries.map((entry) => (
             <div key={entry.id} className="flex items-center justify-between gap-3 p-3.5">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-bold text-ink-900">{nameOf(entry.user_id)}</p>
                 <p className="text-[11px] text-ink-500">
-                  {shortDate(entry.paid_date)} {entry.note ? `· ${entry.note}` : ''}
+                  {shortDate(entry.paid_date)} · {depositMethods.find((item) => item.id === entry.method)?.label ?? 'Cash'}
+                  {entry.reference ? ` · ${entry.reference}` : ''}
+                  {entry.note ? ` · ${entry.note}` : ''}
                 </p>
+                {entry.proof_path ? (
+                  <button
+                    onClick={() => openProof(entry.proof_path as string)}
+                    className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 hover:bg-brand-100"
+                  >
+                    <Paperclip className="h-3 w-3" /> Receipt
+                  </button>
+                ) : null}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <p className="text-sm font-extrabold tabular-nums text-emerald-700">{money(Number(entry.amount), symbol)}</p>
                 {canManage || entry.user_id === user.id ? (
                   <button

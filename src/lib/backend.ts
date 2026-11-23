@@ -1,5 +1,6 @@
 import type {
   BazarExpense,
+  DepositMethod,
   DutyStatus,
   FixedUtility,
   GameRoom,
@@ -30,6 +31,9 @@ export interface DepositInput {
   amount: number
   date: string
   note: string
+  method?: DepositMethod
+  reference?: string
+  proofPath?: string | null
 }
 
 export interface DutyInput {
@@ -78,6 +82,10 @@ export interface Backend {
   deleteUtility(id: string): Promise<void>
   addDeposit(input: DepositInput): Promise<void>
   deleteDeposit(id: string): Promise<void>
+  /** Stores a receipt image and returns the path to keep on the deposit. */
+  uploadDepositProof(file: File): Promise<string>
+  /** Turns a stored proof path into something the browser can open right now. */
+  depositProofUrl(path: string): Promise<string | null>
   addDuty(input: DutyInput): Promise<void>
   updateDuty(id: string, patch: Partial<{ status: DutyStatus; market_route_notes: string; shopping_list: string[] }>): Promise<void>
   deleteDuty(id: string): Promise<void>
@@ -93,6 +101,14 @@ export interface Backend {
   upgradePro(): Promise<void>
   unlockFrame(frame: string): Promise<void>
 }
+
+export const depositMethods: { id: DepositMethod; label: string }[] = [
+  { id: 'cash', label: 'Cash' },
+  { id: 'bkash', label: 'bKash' },
+  { id: 'nagad', label: 'Nagad' },
+  { id: 'bank', label: 'Bank' },
+  { id: 'other', label: 'Other' },
+]
 
 export const guildBanners: { id: string; label: string; className: string }[] = [
   { id: 'midnight', label: 'Midnight Teal', className: 'from-ink-900 via-brand-800 to-brand-600' },

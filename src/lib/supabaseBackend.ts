@@ -349,8 +349,28 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         amount: input.amount,
         paid_date: input.date,
         note: input.note,
+        method: input.method ?? 'cash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
       })
       if (error) throw new Error(error.message)
+    },
+
+    async uploadDepositProof(file: File) {
+      const ctx = await requireContext()
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
+      const path = `${ctx.messId}/${crypto.randomUUID()}.${ext}`
+      const { error } = await supabase.storage
+        .from('deposit-proofs')
+        .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: false })
+      if (error) throw new Error(error.message)
+      return path
+    },
+
+    async depositProofUrl(path: string) {
+      const { data, error } = await supabase.storage.from('deposit-proofs').createSignedUrl(path, 3600)
+      if (error) return null
+      return data?.signedUrl ?? null
     },
 
     async deleteDeposit(id) {

@@ -131,6 +131,9 @@ function seedMonth(
     amount: entry.amount,
     paid_date: isoAt(month, Math.min(5, dayCount)),
     note: 'Monthly deposit',
+    method: 'bkash',
+    reference: '',
+    proof_path: null,
   }))
 
   return { meals, bazar, utilities, deposits }
@@ -649,8 +652,24 @@ export function createDemoBackend(): Backend {
         amount: input.amount,
         paid_date: input.date,
         note: input.note,
+        method: input.method ?? 'cash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
       })
       persist()
+    },
+
+    async uploadDepositProof(file: File) {
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => reject(new Error('Could not read that receipt file.'))
+        reader.readAsDataURL(file)
+      })
+    },
+
+    async depositProofUrl(path: string) {
+      return path
     },
 
     async deleteDeposit(id) {
