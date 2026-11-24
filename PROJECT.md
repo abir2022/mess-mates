@@ -563,7 +563,7 @@ The repo also contains early planning documents (not used at runtime):
 Business model in the code:
 
 - **Free tier**: all accounting, social features, two recent cycle archives, ad slots, rewarded-ad gates for premium frames/challenge rooms/branded PDF.
-- **Pro mess** (`৳199/month` shown in UI): ad-free, unlimited archives, premium frames, challenge rooms. **Currently `upgradePro()` simply sets `is_pro_mess`/`is_pro = true` — there is no payment, receipt validation or subscription state.** Treat it as a demo switch until a billing provider is integrated (Stripe/bKash/etc.) and Pro is granted server-side only.
+- **Pro mess** (`৳199/month` shown in UI): ad-free, unlimited archives, premium frames, challenge rooms. There is still no payment provider, so **Pro is granted manually by support** (SQL in the dashboard) and the app cannot change the flag at all — see §22.
 - Ads are placeholders (`BannerAdSlot`, 5-second rewarded preview); no AdSense/AdMob SDK is installed.
 - Guild points (25/win) and XP (10/win) are the retention loop; leaderboard is global across messes.
 
@@ -579,7 +579,7 @@ Business model in the code:
 
 1. **Migration 004 not applied to the live database (blocker for the newest features).** Role changes, member removal and self-leave will error until the SQL is run. User action required.
 2. ~~**No CI.**~~ **Fixed** — `.github/workflows/ci.yml` runs install → typecheck → tests → build on every push to `main` and every pull request (see §20).
-3. **Monetization is not production-safe.** `upgradePro()` is callable by any manager and grants Pro for free; no billing, no server-side entitlement.
+3. ~~**Monetization is not production-safe.**~~ **Client hole closed** — the free `upgradePro()` path is gone and migration `006_pro_entitlement.sql` blocks client writes to both Pro flags (§22). Still open: there is no billing provider and no subscription state, so activation stays manual.
 4. **Free archive limit is cosmetic.** The two-cycle cap is a Dashboard dropdown gate; Supabase still returns every cycle, so a modified client can read all history.
 5. **Removal is not a ban.** A removed member can rejoin with the invite code (`join_mess` re-activates).
 6. ~~**No realtime.**~~ **Fixed in code** — the app subscribes to Postgres changes for every workspace table and reloads on a debounce (see §21). Needs migration `005_realtime.sql` run once on the live project; until then it falls back to manual refresh.
@@ -807,3 +807,41 @@ idempotent (it swallows `duplicate_object`), so it is safe to re-run.
 assistant), and `005_realtime.sql` has not been applied to the live project. To check it: apply the
 migration, sign in on two devices, log a meal on one and watch the other's meal rate update within a
 second or two without touching refresh.
+
+---
+
+## 22. Pro entitlement (24 Nov 2026)
+
+The Pro tier used to be self-service: `upgradePro()` wrote `messes.is_pro_mess` and
+`profiles.is_pro` straight from the browser, and any mess manager could call it. Even after deleting
+that method the hole stayed open at the database level, because the row policies are column-blind:
+
+- `messes_update` — `can_manage_mess(id)`: an admin could update every column of their mess,
+  `is_pro_mess` included.
+- `profiles_update` — `id = auth.uid()`: any user could set their own `is_pro`.
+
+**What changed**
+
+1. `upgradePro()` is removed from `Backend`, `createSupabaseBackend` and the demo backend. No code
+   path in the app writes either flag.
+2. `supabase/migrations/006_pro_entitlement.sql` adds a `before update` trigger on `messes` and
+   `profiles` (`protect_pro_flag()`). It raises `42501` when the request's JWT role is
+   `authenticated` or `anon` and either flag changes. The service role and the SQL editor are not
+   client roles, so support can still grant it.
+3. The upgrade modal no longer activates anything. It explains that activation is manual and opens a
+   prefilled WhatsApp request (`pro.contact`, `pro.contactHint`, `pro.waMessage` in `src/lib/i18n.ts`).
+
+**Granting Pro today** (Supabase → SQL editor):
+
+```sql
+update public.messes set is_pro_mess = true where id = '<mess uuid>';
+update public.profiles set is_pro = true where id = '<user uuid>';  -- personal grant only
+```
+
+**Still missing:** a real billing provider (Stripe/bKash), a webhook that calls the grant, receipt
+storage and subscription state with an expiry. Until then Pro is a manual switch and the price
+shown in the modal is a placeholder, not a checkout.
+
+**Not verified:** the trigger has not been run against the live database (it needs the migration
+applied), and no attempt was made to call the API from outside the app to confirm the 42501. The
+modal itself was opened in the demo build and renders.

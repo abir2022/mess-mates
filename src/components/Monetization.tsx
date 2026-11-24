@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { BadgeCheck, Crown, Megaphone, Play, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { useApp } from '../context/AppContext'
+import { useI18n } from '../lib/i18n'
 import { Button, Modal, Pill } from './ui'
 
 interface MonetizationValue {
@@ -13,7 +14,8 @@ interface MonetizationValue {
 const MonetizationContext = createContext<MonetizationValue | null>(null)
 
 export function MonetizationProvider({ children }: { children: ReactNode }) {
-  const { ws, run, backend } = useApp()
+  const { ws } = useApp()
+  const { t } = useI18n()
   const isPro = Boolean(ws?.mess.is_pro_mess || ws?.profile.is_pro)
   const [rewardLabel, setRewardLabel] = useState<string | null>(null)
   const [seconds, setSeconds] = useState(5)
@@ -101,26 +103,29 @@ export function MonetizationProvider({ children }: { children: ReactNode }) {
         </div>
       </Modal>
 
-      <Modal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} title="Upgrade Mess to Pro" subtitle="Unlock the full guild experience for every member.">
+      <Modal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        title={t('pro.title')}
+        subtitle={t('pro.subtitle')}
+      >
         <div className="space-y-4">
           <div className="rounded-2xl bg-gradient-to-br from-ink-900 via-brand-800 to-brand-600 p-5 text-white">
             <div className="flex items-center gap-2">
               <Crown className="h-5 w-5 text-amber-300" />
-              <span className="text-sm font-extrabold">Mess Mates Pro</span>
-              <Pill tone="gold">৳199 / month</Pill>
+              <span className="text-sm font-extrabold">{t('pro.plan')}</span>
+              <Pill tone="gold">{t('pro.price')}</Pill>
             </div>
-            <p className="mt-2 text-xs text-brand-50/80">
-              One subscription covers the whole mess. Billing hook is ready for your payment provider.
-            </p>
+            <p className="mt-2 text-xs text-brand-50/80">{t('pro.lead')}</p>
           </div>
 
           <ul className="space-y-2.5 text-sm text-ink-700">
             {[
-              'Ad-free dashboard and arena for every member',
-              'Custom guild banner upload + animated emblem presets',
-              'Unlimited historical monthly archives',
-              'Automated payment delay reminders',
-              'Premium avatar frames included',
+              t('pro.feature1'),
+              t('pro.feature2'),
+              t('pro.feature3'),
+              t('pro.feature4'),
+              t('pro.feature5'),
             ].map((benefit) => (
               <li key={benefit} className="flex items-start gap-2">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
@@ -129,20 +134,25 @@ export function MonetizationProvider({ children }: { children: ReactNode }) {
             ))}
           </ul>
 
+          {/* Pro is not sold in the app: no payment provider is wired up yet, and the
+              entitlement is server-only (see supabase/migrations/006). The button
+              starts a conversation instead of flipping the flag. */}
           <Button
             variant="gold"
             className="w-full"
-            onClick={async () => {
-              const ok = await run(() => backend.upgradePro(), 'Mess upgraded to Pro — ads are off for everyone.')
-              if (ok) setUpgradeOpen(false)
+            onClick={() => {
+              const message = t('pro.waMessage', {
+                mess: ws?.mess.name ?? '',
+                code: ws?.mess.invite_code ?? '',
+              })
+              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener')
+              setUpgradeOpen(false)
             }}
           >
             <Sparkles className="h-4 w-4" />
-            Activate Pro for this mess
+            {t('pro.contact')}
           </Button>
-          <p className="text-center text-[11px] text-ink-400">
-            Demo activation. Wire your billing provider to <span className="font-mono">upgradePro()</span> before launch.
-          </p>
+          <p className="text-center text-[11px] leading-relaxed text-ink-400">{t('pro.contactHint')}</p>
         </div>
       </Modal>
     </MonetizationContext.Provider>

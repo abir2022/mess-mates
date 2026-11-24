@@ -872,14 +872,6 @@ export function createDemoBackend(): Backend {
       persist()
     },
 
-    async upgradePro() {
-      state.mess.is_pro_mess = true
-      state.profile.is_pro = true
-      const member = state.members.find((entry) => entry.user_id === state.profile.id)
-      if (member) member.profile = state.profile
-      persist()
-    },
-
     async unlockFrame(frame) {
       state.profile.avatar_frame = frame
       state.profile.frame_unlocked_until = new Date(Date.now() + 24 * 3600_000).toISOString()

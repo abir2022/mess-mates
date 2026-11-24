@@ -112,7 +112,6 @@ export interface Backend {
   awardGame(roomId: string): Promise<void>
   createCycle(monthLabel: string): Promise<void>
   setCycleStatus(cycleId: string, status: 'open' | 'closed'): Promise<void>
-  upgradePro(): Promise<void>
   unlockFrame(frame: string): Promise<void>
 }
 

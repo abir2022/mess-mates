@@ -620,14 +620,6 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       context = null
     },
 
-    async upgradePro() {
-      const ctx = await requireContext()
-      const profile = await ensureProfile()
-      if (!profile) throw new Error('Not signed in')
-      await supabase.from('messes').update({ is_pro_mess: true }).eq('id', ctx.messId)
-      await supabase.from('profiles').update({ is_pro: true }).eq('id', profile.id)
-    },
-
     async unlockFrame(frame) {
       const profile = await ensureProfile()
       if (!profile) throw new Error('Not signed in')
