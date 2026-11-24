@@ -83,10 +83,10 @@ export function MealsBazar() {
       {tab === 'meals' ? (
         <div className="space-y-4">
           <div className="card flex flex-wrap items-center justify-between gap-3 p-3">
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <button
                 onClick={() => setDate((current) => addDays(current, -1))}
-                className="rounded-lg border border-ink-200 p-2 text-ink-500 hover:bg-ink-50"
+                className="rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
                 aria-label={t('meals.prevDay')}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -97,12 +97,12 @@ export function MealsBazar() {
                   type="date"
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
-                  className="w-[132px] border-none bg-transparent text-xs font-bold text-ink-800 outline-none"
+                  className="w-[126px] min-w-0 border-none bg-transparent text-xs font-bold text-ink-800 outline-none sm:w-[136px]"
                 />
               </div>
               <button
                 onClick={() => setDate((current) => addDays(current, 1))}
-                className="rounded-lg border border-ink-200 p-2 text-ink-500 hover:bg-ink-50"
+                className="rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
                 aria-label={t('meals.nextDay')}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -155,9 +155,9 @@ export function MealsBazar() {
                     <Pill tone="brand">{t('meals.count', { count: rowTotal.toFixed(1) })}</Pill>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="mt-3 grid grid-cols-1 gap-1.5 xs:grid-cols-2 xl:grid-cols-4">
                     {mealFields.map((entry) => (
-                      <div key={entry.field} className="flex items-center justify-between gap-1 rounded-lg bg-ink-50 px-2 py-1.5">
+                      <div key={entry.field} className="flex items-center justify-between gap-2 rounded-lg bg-ink-50 px-2.5 py-1.5">
                         <span className="text-[10px] font-bold uppercase tracking-wide text-ink-500">{t(entry.label)}</span>
                         <Stepper
                           value={mealValue(member.user_id, entry.field)}
@@ -514,7 +514,7 @@ function DepositsTab() {
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <label className="label">{t('meals.amount', { symbol })}</label>
               <input
@@ -532,7 +532,7 @@ function DepositsTab() {
               <input type="date" className="field" value={date} onChange={(event) => setDate(event.target.value)} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
               <label className="label">{t('meals.method')}</label>
               <select className="field" value={method} onChange={(event) => setMethod(event.target.value as DepositMethod)}>

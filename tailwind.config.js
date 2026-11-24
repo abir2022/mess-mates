@@ -3,6 +3,9 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      screens: {
+        xs: '420px',
+      },
       colors: {
         brand: {
           50: '#ecfdf8',
@@ -45,7 +48,7 @@ export default {
         sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        card: '0 1px 2px rgba(15,43,61,0.04), 0 8px 24px -12px rgba(15,43,61,0.18)',
+        card: '0 1px 2px rgba(15,43,61,0.04), 0 4px 14px -10px rgba(15,43,61,0.22)',
         lift: '0 18px 40px -18px rgba(15,43,61,0.35)',
       },
       backgroundImage: {
@@ -60,6 +63,10 @@ export default {
           '0%': { opacity: '0', transform: 'scale(.96)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
+        'sheet-up': {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
         'float': {
           '0%,100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-6px)' },
@@ -67,6 +74,7 @@ export default {
       },
       animation: {
         'fade-up': 'fade-up .35s ease-out both',
+        'sheet-up': 'sheet-up .22s ease-out both',
         pop: 'pop .18s ease-out both',
         float: 'float 5s ease-in-out infinite',
       },

@@ -16,9 +16,9 @@ const variants: Record<Variant, string> = {
 }
 
 const sizes: Record<Size, string> = {
-  sm: 'text-xs px-3 py-1.5 gap-1.5 rounded-lg',
-  md: 'text-sm px-4 py-2.5 gap-2 rounded-xl',
-  lg: 'text-sm px-5 py-3 gap-2 rounded-xl',
+  sm: 'text-xs px-3 py-2 gap-1.5 rounded-lg min-h-9',
+  md: 'text-sm px-4 py-2.5 gap-2 rounded-xl min-h-11',
+  lg: 'text-sm px-5 py-3 gap-2 rounded-xl min-h-12',
 }
 
 export function Button({
@@ -31,7 +31,7 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size; loading?: boolean }) {
   return (
     <button
-      className={`inline-flex items-center justify-center font-semibold transition focus:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`inline-flex select-none items-center justify-center font-semibold transition active:scale-[0.985] focus:outline-none focus-visible:ring-4 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={rest.disabled || loading}
       {...rest}
     >
@@ -51,7 +51,7 @@ export function IconButton({
     <button
       aria-label={label}
       title={label}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-500 transition hover:bg-ink-100 hover:text-ink-800 disabled:opacity-40 ${className}`}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-500 transition hover:bg-ink-100 hover:text-ink-800 active:bg-ink-200 disabled:opacity-40 max-md:h-11 max-md:w-11 ${className}`}
       {...rest}
     >
       {children}
@@ -82,7 +82,12 @@ export function Modal({
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+    }
   }, [open, onClose])
 
   if (!open) return null
@@ -94,7 +99,7 @@ export function Modal({
       role="presentation"
     >
       <div
-        className={`animate-fade-up max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white shadow-lift sm:rounded-3xl ${
+        className={`animate-sheet-up max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white shadow-lift sm:animate-fade-up sm:rounded-3xl ${
           wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'
         }`}
         onClick={(event) => event.stopPropagation()}
@@ -102,8 +107,9 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-ink-100 px-5 py-4">
-          <div>
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-ink-100 bg-white/95 px-5 pb-3 pt-2 backdrop-blur sm:py-4">
+          <div className="min-w-0">
+            <span className="mx-auto mb-2 block h-1.5 w-10 rounded-full bg-ink-200 sm:hidden" />
             <h2 className="text-base font-extrabold text-ink-900">{title}</h2>
             {subtitle ? <p className="mt-0.5 text-xs text-ink-500">{subtitle}</p> : null}
           </div>
@@ -112,7 +118,9 @@ export function Modal({
           </IconButton>
         </div>
         <div className="px-5 py-4">{children}</div>
-        {footer ? <div className="border-t border-ink-100 px-5 py-4">{footer}</div> : null}
+        {footer ? (
+          <div className="sheet-safe sticky bottom-0 border-t border-ink-100 bg-white px-5 py-4">{footer}</div>
+        ) : null}
       </div>
     </div>
   )
@@ -133,7 +141,7 @@ export function Tabs<T extends string>({
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition ${
+          className={`flex min-h-9 flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-bold transition active:scale-[0.98] sm:flex-1 ${
             value === tab.id ? 'bg-white text-brand-700 shadow-sm' : 'text-ink-500 hover:text-ink-700'
           }`}
         >
@@ -231,11 +239,11 @@ export function Stepper({
         aria-label="Decrease"
         disabled={disabled || value <= min}
         onClick={() => onChange(clamp(value - step))}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 disabled:opacity-30"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 active:bg-ink-200 disabled:opacity-30"
       >
-        <Minus className="h-3.5 w-3.5" />
+        <Minus className="h-4 w-4" />
       </button>
-      <span className="w-7 text-center text-xs font-bold tabular-nums text-ink-800">
+      <span className="w-8 text-center text-sm font-bold tabular-nums text-ink-800">
         {Number.isInteger(value) ? value : value.toFixed(1)}
       </span>
       <button
@@ -243,9 +251,9 @@ export function Stepper({
         aria-label="Increase"
         disabled={disabled || value >= max}
         onClick={() => onChange(clamp(value + step))}
-        className="flex h-7 w-7 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 disabled:opacity-30"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 active:bg-ink-200 disabled:opacity-30"
       >
-        <Plus className="h-3.5 w-3.5" />
+        <Plus className="h-4 w-4" />
       </button>
     </div>
   )
@@ -265,7 +273,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
           setCopied(false)
         }
       }}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-bold text-brand-700 transition hover:bg-brand-50"
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-bold text-brand-700 transition hover:bg-brand-50"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       {copied ? 'Copied' : label}
@@ -303,9 +311,9 @@ export function Pill({
 
 export function SectionHeading({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
   return (
-    <div className="mb-3 flex items-end justify-between gap-3">
-      <div>
-        <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink-700">{title}</h2>
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+      <div className="min-w-0">
+        <h2 className="text-[15px] font-bold leading-snug text-ink-900">{title}</h2>
         {hint ? <p className="mt-0.5 text-xs text-ink-500">{hint}</p> : null}
       </div>
       {action}

@@ -20,7 +20,7 @@ import { useI18n } from '../lib/i18n'
 export function SplashScreen() {
   const { t } = useI18n()
   return (
-    <div className="flex min-h-screen items-center justify-center bg-ink-50">
+    <div className="flex min-h-dvh items-center justify-center bg-ink-50">
       <div className="flex flex-col items-center gap-3">
         <img src="/logo.png" alt="Mess Mates" className="h-16 w-16 animate-float rounded-2xl" />
         <p className="text-sm font-bold text-ink-500">{t('auth.splash')}</p>
@@ -37,8 +37,8 @@ export function AuthScreen() {
   const [showEmail, setShowEmail] = useState(false)
 
   return (
-    <div className="min-h-screen bg-ink-50 md:grid md:grid-cols-[1.1fr_1fr]">
-      <section className="relative overflow-hidden bg-guild-hero px-6 py-10 text-white md:flex md:flex-col md:justify-between md:px-12 md:py-14">
+    <div className="min-h-dvh bg-ink-50 md:grid md:grid-cols-[1.1fr_1fr]">
+      <section className="relative order-2 overflow-hidden bg-guild-hero px-5 py-8 text-white sm:px-6 md:order-1 md:flex md:flex-col md:justify-between md:px-12 md:py-14">
         <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-400/20 blur-3xl" />
         <div className="absolute -bottom-32 -left-16 h-72 w-72 rounded-full bg-flame-500/20 blur-3xl" />
 
@@ -53,7 +53,7 @@ export function AuthScreen() {
             </div>
           </div>
 
-          <h1 className="mt-8 max-w-lg text-3xl font-extrabold leading-tight md:mt-12 md:text-[2.6rem]">
+          <h1 className="mt-6 max-w-lg text-[26px] font-extrabold leading-tight sm:text-3xl md:mt-12 md:text-[2.6rem]">
             {t('auth.headline1')}
             <br />
             {t('auth.headline2')}
@@ -82,7 +82,7 @@ export function AuthScreen() {
         </div>
       </section>
 
-      <section className="flex items-center justify-center px-4 py-10 md:px-10">
+      <section className="order-1 flex items-center justify-center px-4 py-6 md:order-2 md:px-10 md:py-10">
         <div className="w-full max-w-sm">
           <div className="mb-3 flex justify-end">
             <LanguageToggle />
@@ -189,8 +189,8 @@ export function OnboardingScreen() {
   const [code, setCode] = useState('')
 
   return (
-    <div className="min-h-screen bg-ink-50">
-      <div className="mx-auto flex min-h-screen max-w-4xl flex-col px-4 py-8">
+    <div className="min-h-dvh bg-ink-50">
+      <div className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="Mess Mates" className="h-10 w-10 rounded-xl object-cover" />

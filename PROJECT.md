@@ -637,3 +637,76 @@ Business model in the code:
 - [ ] Add CI (typecheck + tests + build) before the next feature.
 - [ ] Before charging money: integrate a real billing provider and move Pro entitlement server-side.
 - [ ] Before growing: add Realtime and push notifications, then address the open issues in §16.
+
+---
+
+## 19. UI system, responsive rules and design skills (24 Nov 2026)
+
+### 19.1 Design tokens
+
+Defined in `tailwind.config.js`; never use raw hex in components.
+
+| Token | Value | Role |
+|---|---|---|
+| `brand` 50–900 | teal, `500 = #16a394`, `600 = #0c8279` | primary actions, active nav, links |
+| `ink` 50–900 | slate, `50 = #f4f7f9`, `900 = #0f2b3d` | page ground, text, sidebar |
+| `flame` 50–900 | orange, `500 = #fb5d12` | warnings, duty nudges, gold CTAs |
+| `bg-guild-hero` | radial teal→ink | the one bold surface (dashboard rate card, auth hero) |
+| `shadow-card` / `shadow-lift` | flat 4px ambient / deep modal | cards sit quiet, modals lift |
+| screens | `xs 420`, `sm 640`, `md 768`, `lg 1024`, `xl 1280` | mobile-first |
+
+Semantic classes in `src/index.css`: `.card`, `.field`, `.label`, `.chip`, `.nav-link`,
+`.table-head`, `.app-main` (bottom bar clearance), `.app-nav` (safe area), `.sheet-safe`.
+
+Typography: **Plus Jakarta Sans** for UI, **Hind Siliguri** for Bengali (`html[lang='bn']`),
+`tabular-nums` for every amount, sentence-case labels (all-caps is reserved for the 10 px guild
+badge). Type floor: 14 px body, 12 px metadata, 16 px inputs on phones so iOS never zooms.
+
+### 19.2 The application shell
+
+| | Phone (< 768 px) | Desktop (≥ 768 px) |
+|---|---|---|
+| Navigation | fixed bottom bar, 5 items (Dashboard, Meals, Arena, Hub, Settlement), safe-area padded | 288 px left sidebar, scrollable, guild card + nav + cycle + profile + Pro note |
+| Context | compact header: mess name, emblem + points, language toggle, avatar | sidebar guild card + cycle/member summary |
+| Content | `px-3.5 → sm:px-5`, bottom padding `--nav-h + --safe-b + 24px` | `max-w-6xl`, `md:px-8 lg:px-10`, `pb-10` |
+| Height | `min-h-dvh` (not `100vh`) so mobile browser chrome cannot clip the nav | `h-dvh` sticky sidebar |
+
+Toast/banner stack floats above the bottom bar via `bottom-[calc(var(--nav-h)+var(--safe-b)+.75rem)]`.
+Modals are bottom sheets on phones (drag handle, sticky header/footer, body scroll lock,
+`max-h-[92dvh]`) and centred dialogs from `sm` up.
+
+### 19.3 Responsive patterns used
+
+1. **Tables become cards.** `Dashboard` member breakdown and the `Settlement` statement render a
+   `hidden md:block print:block` table plus an `md:hidden print:hidden` card list. Printing always
+   uses the table.
+2. **Steppers stack.** Meal steppers go `grid-cols-1 → xs:2 → xl:4`; form field pairs go
+   `grid-cols-1 → sm:2`.
+3. **Forms first on phones.** The auth screen puts the sign-in card above the marketing hero
+   (`order-1 md:order-2`).
+4. **Chat sizes in dvh.** `Hub → Board` is `h-[calc(100dvh-15rem)] lg:h-[70vh]`, so the composer is
+   always reachable.
+5. **Tap feedback everywhere.** Buttons and tabs use `active:scale-[0.985]`; hover styles are
+   additive, never the only affordance.
+6. **Reduced motion** is honoured globally (`prefers-reduced-motion` disables animation).
+
+### 19.4 Design skills installed in-repo
+
+Installed under `.agents/skills/` (agent-agnostic convention, read by `AGENTS.md`):
+
+| Skill | Source | Notes |
+|---|---|---|
+| `ui-ux-pro-max` | github.com/nextlevelbuilder/ui-ux-pro-max-skill | Rules + CSV datasets + Python search script (`scripts/search.py ... --design-system`) |
+| `frontend-design` | github.com/anthropics/skills (`skills/frontend-design`) | Aesthetic direction, typography, copy voice |
+| `design-taste-frontend` | github.com/Leonxlnx/taste-skill (`skills/taste-skill`) | Anti-slop composition; its 37 MB `assets/` library is gitignored |
+
+`AGENTS.md` is the short version: mobile-first, 44 px targets, type floor, token discipline,
+EN+BN for every string.
+
+### 19.5 Verified for this pass
+
+- `npm run typecheck` — pass.
+- `bun test` — 31 pass / 0 fail.
+- `npm run build` — pass (same >500 kB vendor chunk warning from jsPDF).
+- **Not verified:** no browser click-through at 360/768/1440 px, no Lighthouse run, no screen
+  reader pass. Layout changes are static-review verified only.

@@ -110,7 +110,7 @@ function PollsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <SectionHeading title={t('arena.openBallots')} hint={t('arena.openBallotsHint')} />
         <Button size="sm" onClick={() => setOpen(true)}>
           <Plus className="h-3.5 w-3.5" /> {t('arena.newPoll')}
@@ -340,14 +340,14 @@ function GamesTab() {
         </div>
       </div>
 
-      <div className="card flex flex-wrap items-center justify-between gap-3 border-amber-200 bg-gradient-to-r from-amber-50 to-white p-3.5">
+      <div className="card flex flex-col gap-2.5 border-amber-200 bg-gradient-to-r from-amber-50 to-white p-3.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="flex items-center gap-1.5 text-xs font-extrabold text-amber-900">
             <Crown className="h-3.5 w-3.5" /> {t('arena.challengeTitle')}
           </p>
           <p className="mt-0.5 text-[11px] text-amber-700">{t('arena.challengeBody')}</p>
         </div>
-        <Button size="sm" variant="gold" onClick={createChallenge}>
+        <Button size="sm" variant="gold" onClick={createChallenge} className="sm:w-auto w-full">
           <Sparkles className="h-3.5 w-3.5" /> {t('arena.unlockChallenge')}
         </Button>
       </div>
@@ -435,11 +435,11 @@ function GuildTab() {
 
   return (
     <div className="space-y-4">
-      <div className={`card relative overflow-hidden bg-gradient-to-br ${bannerClass(ws.mess.guild_banner)} p-5 text-white`}>
+      <div className={`card relative overflow-hidden bg-gradient-to-br ${bannerClass(ws.mess.guild_banner)} p-4 text-white sm:p-5`}>
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 text-4xl backdrop-blur">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-3xl backdrop-blur sm:h-16 sm:w-16 sm:text-4xl">
               {ws.mess.guild_emblem}
             </span>
             <div>
@@ -487,7 +487,7 @@ function GuildTab() {
               <button
                 key={emblem}
                 onClick={() => run(() => backend.updateMess({ guild_emblem: emblem }), 'Guild emblem updated')}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition ${
+                className={`flex h-10 w-10 items-center justify-center rounded-lg border text-lg transition ${
                   ws.mess.guild_emblem === emblem ? 'border-brand-500 bg-brand-50' : 'border-ink-200 hover:border-brand-300'
                 }`}
               >

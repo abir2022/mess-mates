@@ -78,7 +78,7 @@ function BoardTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <div className="card flex min-h-[520px] flex-col overflow-hidden">
+      <div className="card flex h-[calc(100dvh-15rem)] min-h-[26rem] flex-col overflow-hidden lg:h-[70vh]">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
           <div>
             <p className="text-sm font-extrabold text-ink-900">{t('hub.boardTitle')}</p>
@@ -89,7 +89,7 @@ function BoardTab() {
           </Pill>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3" style={{ maxHeight: '58vh' }}>
+        <div className="flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
           {messages.length === 0 ? (
             <EmptyState icon={<MessageSquare className="h-4 w-4" />} title={t('hub.sayHello')} body={t('hub.sayHelloBody')} />
           ) : (
@@ -146,7 +146,7 @@ function BoardTab() {
                 }
               }}
             />
-            <Button onClick={send} disabled={!content.trim() || busy} loading={busy} className="h-[42px]">
+            <Button onClick={send} disabled={!content.trim() || busy} loading={busy} className="h-11 shrink-0 px-3">
               <Send className="h-4 w-4" />
             </Button>
           </div>
@@ -589,7 +589,7 @@ function SettingsTab() {
         <SectionHeading title={t('hub.cycles')} hint={t('hub.cyclesHint')} />
         <div className="space-y-2">
           {ws.cycles.map((entry) => (
-            <div key={entry.id} className="flex items-center justify-between gap-2 rounded-xl border border-ink-100 px-3 py-2">
+            <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 px-3 py-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-3.5 w-3.5 text-ink-400" />
                 <span className="text-xs font-bold text-ink-800">{monthTitle(entry.month_label)}</span>
@@ -614,7 +614,7 @@ function SettingsTab() {
         </div>
 
         {canManage ? (
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-col gap-2 xs:flex-row">
             <select className="field flex-1" value={nextMonth} onChange={(event) => setNextMonth(event.target.value)}>
               {monthChoices.map((choice) => (
                 <option key={choice.label} value={choice.label}>

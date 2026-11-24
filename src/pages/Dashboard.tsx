@@ -76,7 +76,7 @@ export function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-400">
             {cycle.status === 'open' ? t('dash.liveCycle') : t('dash.archivedCycle')}
@@ -88,8 +88,8 @@ export function Dashboard() {
             {ws.mess.name} · {monthTitle(cycle.month_label)} · {ws.mess.invite_code}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <select
               value={cycleId ?? ''}
               onChange={(event) => {
@@ -100,7 +100,7 @@ export function Dashboard() {
                 }
                 setCycleId(next)
               }}
-              className="field w-auto appearance-none py-2 pr-8 text-xs font-bold"
+              className="field w-full appearance-none py-2 pr-8 text-xs font-bold sm:w-auto"
             >
               {sortedCycles.map((entry) => (
                 <option key={entry.id} value={entry.id}>
@@ -112,7 +112,7 @@ export function Dashboard() {
           </div>
           <Link
             to="/settlement"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-brand-700"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-brand-700"
           >
             {t('dash.settlement')} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
@@ -120,14 +120,14 @@ export function Dashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card relative overflow-hidden bg-guild-hero p-5 text-white lg:col-span-2">
+        <div className="card relative overflow-hidden bg-guild-hero p-4 text-white sm:p-5 lg:col-span-2">
           <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-300/20 blur-2xl" />
           <div className="relative flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-brand-100/80">
                 <UtensilsCrossed className="h-3.5 w-3.5" /> {t('dash.mealRate')}
               </p>
-              <p className="mt-2 text-4xl font-extrabold tabular-nums tracking-tight">
+              <p className="mt-2 text-[34px] font-extrabold tabular-nums leading-none tracking-tight sm:text-4xl">
                 {money(settlement.mealRate, symbol)}
               </p>
               <p className="mt-1 text-[11px] text-brand-50/70">{t('dash.perMeal')}</p>
@@ -342,7 +342,60 @@ export function Dashboard() {
           }
         />
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="divide-y divide-ink-100 md:hidden print:hidden">
+            {settlement.members.map((member) => (
+              <div
+                key={member.userId}
+                className={`p-3.5 ${member.userId === user.id ? 'bg-brand-50/40' : ''}`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <Avatar name={member.name} url={avatarOf(member.userId)} frame={member.frame} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-bold text-ink-900">
+                      {member.name}{' '}
+                      {member.userId === user.id ? <span className="text-brand-600">{t('dash.you')}</span> : null}
+                    </p>
+                    <p className="text-[11px] font-semibold text-ink-400">{t(`role.${member.role}` as MessageKey)}</p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-md px-2 py-1 text-xs font-extrabold tabular-nums ${
+                      member.balance < 0
+                        ? 'bg-rose-50 text-rose-600'
+                        : member.balance > 0
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-ink-100 text-ink-500'
+                    }`}
+                  >
+                    {money(member.balance, symbol)}
+                  </span>
+                </div>
+                <dl className="mt-2.5 grid grid-cols-3 gap-2 rounded-lg bg-ink-50/70 px-2.5 py-2 text-[11px]">
+                  <div className="min-w-0">
+                    <dt className="text-ink-400">{t('dash.meals')}</dt>
+                    <dd className="truncate font-bold tabular-nums text-ink-800">{member.meals.toFixed(1)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-ink-400">{t('dash.deposits')}</dt>
+                    <dd className="truncate font-bold tabular-nums text-ink-800">{money(member.deposits, symbol)}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-ink-400">{t('dash.payable')}</dt>
+                    <dd className="truncate font-bold tabular-nums text-ink-800">{money(member.payable, symbol)}</dd>
+                  </div>
+                </dl>
+                {canManage && member.balance < -0.5 ? (
+                  <button
+                    onClick={() => remindMember(member.userId, Math.abs(member.balance))}
+                    disabled={busy}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-ink-200 py-2 text-[11px] font-bold text-ink-600 transition hover:border-brand-300 hover:text-brand-700"
+                  >
+                    <BellRing className="h-3.5 w-3.5" /> {t('dash.send')}
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block print:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-ink-100 bg-ink-50/60">
@@ -422,7 +475,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border border-ink-100 bg-white px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 bg-white px-4 py-3">
         <p className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-500">
           <Trophy className="h-3.5 w-3.5 text-amber-500" />{' '}
           {t('dash.guildRank', { points: ws.mess.guild_points.toLocaleString() })}

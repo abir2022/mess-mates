@@ -42,21 +42,21 @@ export function Settlement() {
 
   return (
     <div className="mx-auto max-w-4xl print-full">
-      <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2">
-        <Link to="/" className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-ink-500 hover:bg-ink-100">
+      <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <Link to="/" className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-bold text-ink-500 hover:bg-ink-100">
           <ArrowLeft className="h-3.5 w-3.5" /> {t('nav.dashboard')}
         </Link>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <button
             onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-ink-200 bg-white px-3 py-2 text-xs font-bold text-ink-700 transition hover:border-brand-300"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-xs font-bold text-ink-700 transition hover:border-brand-300"
           >
             <Printer className="h-3.5 w-3.5" /> {t('settle.print')}
           </button>
           <button
             onClick={brandedPdf}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-flame-500 px-3 py-2 text-xs font-bold text-ink-900 shadow-sm transition hover:brightness-105 disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-flame-500 px-3 py-2.5 text-xs font-bold text-ink-900 shadow-sm transition hover:brightness-105 disabled:opacity-60"
           >
             <Download className="h-3.5 w-3.5" /> {t('settle.brandedPdf')}
             {!isPro ? <span className="rounded bg-ink-900/10 px-1 text-[9px]">AD</span> : null}
@@ -64,7 +64,7 @@ export function Settlement() {
         </div>
       </div>
 
-      <div className="card overflow-hidden bg-white p-6 print-full">
+      <div className="card overflow-hidden bg-white p-4 print-full sm:p-6">
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-100 pb-5">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Mess Mates" className="h-12 w-12 rounded-xl object-cover" />
@@ -104,7 +104,52 @@ export function Settlement() {
           ))}
         </div>
 
-        <div className="mt-5 overflow-x-auto">
+        <div className="mt-5 space-y-2 md:hidden print:hidden">
+          {settlement.members.map((member) => (
+            <div key={member.userId} className="rounded-xl border border-ink-100 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-bold text-ink-900">
+                    {member.name}
+                    {member.userId === user.id ? (
+                      <span className="ml-1 text-[11px] font-semibold text-brand-600">(you)</span>
+                    ) : null}
+                  </p>
+                  <p className="text-[11px] text-ink-400">
+                    {member.breakfast} / {member.lunch} / {member.dinner} / {member.guestMeals}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 text-sm font-extrabold tabular-nums ${
+                    member.balance < 0 ? 'text-rose-600' : 'text-emerald-700'
+                  }`}
+                >
+                  {money(member.balance, symbol)}
+                </span>
+              </div>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-ink-100 pt-2 text-[11px]">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-400">{t('settle.colMeals')}</dt>
+                  <dd className="font-bold tabular-nums text-ink-700">{member.meals.toFixed(1)}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-400">{t('settle.colMealCost')}</dt>
+                  <dd className="font-bold tabular-nums text-ink-700">{money(member.mealCost, symbol)}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-400">{t('settle.colUtility')}</dt>
+                  <dd className="font-bold tabular-nums text-ink-700">{money(member.utilityShare, symbol)}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-400">{t('settle.colDeposits')}</dt>
+                  <dd className="font-bold tabular-nums text-ink-700">{money(member.deposits, symbol)}</dd>
+                </div>
+              </dl>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 hidden overflow-x-auto md:block print:block">
           <table className="w-full min-w-[760px] text-xs">
             <thead>
               <tr className="border-b border-ink-200 text-left">
