@@ -5,8 +5,9 @@ import { useApp } from '../context/AppContext'
 import { Pill } from './ui'
 import type { GameRoom } from '../lib/types'
 import { timeAgo } from '../lib/format'
+import { START_FEN } from '../lib/chess'
 
-export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+export { START_FEN }
 
 const glyphs: Record<string, string> = {
   p: '♟',

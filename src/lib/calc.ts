@@ -176,6 +176,57 @@ export function currentPersonal(settlement: Settlement, userId: string): MemberS
   return settlement.members.find((member) => member.userId === userId)
 }
 
+export interface Transfer {
+  fromUserId: string
+  from: string
+  toUserId: string
+  to: string
+  amount: number
+}
+
+/**
+ * Turns settlement balances into the few payments that clear the month: every
+ * member in credit is paid by members in debt, biggest amounts first.
+ *
+ * Greedy matching, not the theoretical minimum number of transfers (that problem
+ * is NP-hard), but it never exceeds `debtors + creditors - 1` payments and it
+ * always pays out exactly as much as the mess owes. Members whose balance is
+ * within half a paisa are skipped so rounding never creates a phantom transfer.
+ */
+export function settleUpPlan(settlement: Settlement): Transfer[] {
+  const debtors = settlement.members
+    .filter((member) => member.balance < -0.005)
+    .map((member) => ({ member, left: round2(-member.balance) }))
+    .sort((a, b) => b.left - a.left || a.member.name.localeCompare(b.member.name))
+  const creditors = settlement.members
+    .filter((member) => member.balance > 0.005)
+    .map((member) => ({ member, left: round2(member.balance) }))
+    .sort((a, b) => b.left - a.left || a.member.name.localeCompare(b.member.name))
+
+  const transfers: Transfer[] = []
+  let debtor = 0
+  let creditor = 0
+
+  while (debtor < debtors.length && creditor < creditors.length) {
+    const amount = round2(Math.min(debtors[debtor].left, creditors[creditor].left))
+    if (amount > 0.005) {
+      transfers.push({
+        fromUserId: debtors[debtor].member.userId,
+        from: debtors[debtor].member.name,
+        toUserId: creditors[creditor].member.userId,
+        to: creditors[creditor].member.name,
+        amount,
+      })
+    }
+    debtors[debtor].left = round2(debtors[debtor].left - amount)
+    creditors[creditor].left = round2(creditors[creditor].left - amount)
+    if (debtors[debtor].left <= 0.005) debtor += 1
+    if (creditors[creditor].left <= 0.005) creditor += 1
+  }
+
+  return transfers
+}
+
 export function isMealLocked(lockHour: number, dateISO: string, role: string): boolean {
   if (role === 'admin' || role === 'manager') return false
   const today = new Date()

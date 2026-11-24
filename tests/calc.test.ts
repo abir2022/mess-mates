@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { carriedBalances, computeSettlement, round2 } from '../src/lib/calc'
+import { carriedBalances, computeSettlement, round2, settleUpPlan } from '../src/lib/calc'
 import type {
   BazarExpense,
   DailyMeal,
@@ -183,6 +183,74 @@ describe('computeSettlement', () => {
     const s = computeSettlement(ws, 'nov')
     expect(s.memberCount).toBe(1)
     expect(s.utilityShare).toBe(300)
+  })
+})
+
+describe('settleUpPlan', () => {
+  test('pays the creditor exactly what the debtor owes', () => {
+    const ws = workspace({
+      meals: [meal('nov', 'abir', 0, 60, 0), meal('nov', 'rakib', 0, 40, 0)],
+      bazar: [bazar('nov', 'abir', 1000)],
+      utilities: [utility('nov', 200)],
+      deposits: [deposit('nov', 'abir', 500), deposit('nov', 'rakib', 800)],
+    })
+    const s = computeSettlement(ws, 'nov')
+    const plan = settleUpPlan(s)
+
+    expect(plan).toHaveLength(1)
+    expect(plan[0]).toEqual({ fromUserId: 'abir', from: 'ABIR', toUserId: 'rakib', to: 'RAKIB', amount: 200 })
+    expect(s.members.find((m) => m.userId === 'rakib')!.balance - 200).toBe(100)
+  })
+
+  test('a member in credit pays nobody', () => {
+    const ws = workspace({
+      users: ['abir', 'rakib', 'sajid'],
+      meals: [meal('nov', 'abir', 0, 30, 0), meal('nov', 'rakib', 0, 30, 0), meal('nov', 'sajid', 0, 0, 0)],
+      bazar: [bazar('nov', 'abir', 600)],
+      deposits: [deposit('nov', 'abir', 300), deposit('nov', 'rakib', 100), deposit('nov', 'sajid', 400)],
+    })
+    const plan = settleUpPlan(computeSettlement(ws, 'nov'))
+    const payers = new Set(plan.map((transfer) => transfer.fromUserId))
+    expect(payers.has('sajid')).toBe(false)
+    expect(payers.has('rakib')).toBe(true)
+  })
+
+  test('never needs more transfers than members minus one, and moves exactly the dues', () => {
+    const ws = workspace({
+      users: ['abir', 'rakib', 'sajid', 'tanvir'],
+      meals: [
+        meal('nov', 'abir', 0, 40, 0),
+        meal('nov', 'rakib', 0, 30, 0),
+        meal('nov', 'sajid', 0, 20, 0),
+        meal('nov', 'tanvir', 0, 10, 0),
+      ],
+      bazar: [bazar('nov', 'abir', 900)],
+      utilities: [utility('nov', 400)],
+      deposits: [deposit('nov', 'rakib', 100)],
+    })
+    const s = computeSettlement(ws, 'nov')
+    const plan = settleUpPlan(s)
+
+    expect(plan.length).toBeLessThanOrEqual(s.members.length - 1)
+    const moved = round2(plan.reduce((sum, transfer) => sum + transfer.amount, 0))
+    const owed = round2(s.members.filter((m) => m.balance < 0).reduce((sum, m) => sum + -m.balance, 0))
+    const credit = round2(s.members.filter((m) => m.balance > 0).reduce((sum, m) => sum + m.balance, 0))
+    expect(moved).toBe(Math.min(owed, credit))
+  })
+
+  test('a settled month produces no transfers', () => {
+    const ws = workspace({} )
+    expect(settleUpPlan(computeSettlement(ws, 'nov'))).toEqual([])
+  })
+
+  test('ignores sub-paisa rounding noise', () => {
+    const ws = workspace({
+      meals: [meal('nov', 'abir', 0, 3, 0), meal('nov', 'rakib', 0, 3, 0)],
+      bazar: [bazar('nov', 'abir', 100)],
+    })
+    const s = computeSettlement(ws, 'nov')
+    s.members = s.members.map((member) => ({ ...member, balance: member.userId === 'abir' ? -0.004 : 0.004 }))
+    expect(settleUpPlan(s)).toEqual([])
   })
 })
 

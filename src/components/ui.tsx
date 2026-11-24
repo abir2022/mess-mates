@@ -1,5 +1,5 @@
 import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
-import { Check, Copy, Loader2, Minus, Plus, X } from 'lucide-react'
+import { Check, Copy, Loader2, Minus, Plus, Share2, X } from 'lucide-react'
 import { frameRing } from '../lib/backend'
 import { initials } from '../lib/format'
 
@@ -273,9 +273,53 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
           setCopied(false)
         }
       }}
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-bold text-brand-700 transition hover:bg-brand-50"
+      className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-bold text-brand-700 transition hover:bg-brand-50 sm:min-h-0"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? 'Copied' : label}
+    </button>
+  )
+}
+
+/**
+ * Invites on a phone should go through the OS share sheet (WhatsApp, Messenger,
+ * SMS) instead of copy-paste; desktop browsers fall back to the clipboard.
+ */
+export function ShareButton({
+  title,
+  text,
+  label,
+  className = '',
+}: {
+  title: string
+  text: string
+  label: string
+  className?: string
+}) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+          try {
+            await navigator.share({ title, text })
+          } catch {
+            // The user closed the sheet; there is nothing to report.
+          }
+          return
+        }
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1600)
+        } catch {
+          setCopied(false)
+        }
+      }}
+      className={`inline-flex min-h-11 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-bold text-brand-700 transition hover:bg-brand-50 sm:min-h-9 ${className}`}
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Share2 className="h-3 w-3" />}
       {copied ? 'Copied' : label}
     </button>
   )

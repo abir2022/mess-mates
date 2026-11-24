@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
-import { Avatar, Button, CopyButton, EmptyState, Modal, Pill, SectionHeading, Tabs } from '../components/ui'
+import { Avatar, Button, CopyButton, EmptyState, Modal, Pill, SectionHeading, ShareButton, Tabs } from '../components/ui'
 import { resetDemoData } from '../lib/demo'
 import { useI18n } from '../lib/i18n'
 import { addDays, monthOptions, monthTitle, relativeDay, shortDate, timeAgo, todayISO } from '../lib/format'
@@ -506,7 +506,14 @@ function SettingsTab() {
               <p className="text-[10px] font-bold uppercase tracking-wide text-brand-700">{t('hub.inviteCode')}</p>
               <p className="font-mono text-lg font-extrabold tracking-[0.25em] text-brand-900">{ws.mess.invite_code}</p>
             </div>
-            <CopyButton value={ws.mess.invite_code} label={t('hub.copyCode')} />
+            <div className="flex shrink-0 items-center gap-1">
+              <ShareButton
+                title={t('share.inviteTitle')}
+                text={t('share.inviteText', { mess: ws.mess.name, code: ws.mess.invite_code })}
+                label={t('share.invite')}
+              />
+              <CopyButton value={ws.mess.invite_code} label={t('hub.copyCode')} />
+            </div>
           </div>
         </div>
       </div>

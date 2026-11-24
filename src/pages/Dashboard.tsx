@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
+import { GettingStarted } from '../components/GettingStarted'
 import { BannerAdSlot, useMonetization } from '../components/Monetization'
 import { ReminderCenter } from '../components/ReminderCenter'
 import { Avatar, Button, Pill, SectionHeading } from '../components/ui'
@@ -118,6 +119,8 @@ export function Dashboard() {
           </Link>
         </div>
       </div>
+
+      <GettingStarted />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="card relative overflow-hidden bg-guild-hero p-4 text-white sm:p-5 lg:col-span-2">

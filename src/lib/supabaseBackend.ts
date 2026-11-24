@@ -340,6 +340,25 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     },
 
     async joinMess(code: string) {
+      const profile = await ensureProfile()
+      if (!profile) throw new Error('Not signed in')
+
+      // One mess per account for now. `loadWorkspace` picks a single active
+      // membership, so joining a second one would silently hide the first — a
+      // wrong number is worse than a clear refusal.
+      const { data: existing, error: existingError } = await supabase
+        .from('mess_members')
+        .select('mess_id')
+        .eq('user_id', profile.id)
+        .eq('status', 'active')
+        .limit(1)
+      if (existingError) throw new Error(existingError.message)
+      if ((existing ?? []).length > 0) {
+        throw new Error(
+          'This account is already in a mess. Leave it from Mess Hub → Settings before joining another — one mess per account for now.',
+        )
+      }
+
       const { error } = await supabase.rpc('join_mess', { p_code: code.trim().toUpperCase() })
       if (error) throw new Error(error.message)
       context = null

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import {
   Check,
   Crown,
@@ -18,11 +18,14 @@ import {
 import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
 import { Avatar, Button, EmptyState, Modal, Pill, SectionHeading, Tabs } from '../components/ui'
-import { ChessGame, START_FEN } from '../components/ChessGame'
+import { START_FEN } from '../lib/chess'
 import { DiceDuel } from '../components/DiceDuel'
 import { avatarFrames, bannerClass, guildBanners, guildEmblems } from '../lib/backend'
 import { timeAgo } from '../lib/format'
 import { useI18n, type MessageKey } from '../lib/i18n'
+
+// The board and chess.js only load when somebody opens a room.
+const ChessGame = lazy(() => import('../components/ChessGame').then((module) => ({ default: module.ChessGame })))
 
 type ArenaTab = 'polls' | 'games' | 'guild'
 
@@ -406,7 +409,15 @@ function GamesTab() {
       </div>
 
       <Modal open={Boolean(activeRoom)} onClose={() => setRoomId(null)} title={activeRoom?.game_type === 'challenge' ? t('arena.challengeRoom') : t('arena.chessTitle')} subtitle={activeRoom ? t('arena.roomCode', { code: activeRoom.code }) : undefined} wide>
-        {activeRoom ? <ChessGame room={activeRoom} /> : null}
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-10">
+              <span className="h-6 w-6 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
+            </div>
+          }
+        >
+          {activeRoom ? <ChessGame room={activeRoom} /> : null}
+        </Suspense>
       </Modal>
 
       <Modal open={diceOpen} onClose={() => setDiceOpen(false)} title={t('arena.diceTitle')} subtitle={t('arena.diceSub')}>

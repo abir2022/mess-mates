@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, Crown, Download, Printer, Sparkles } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
-import { Pill } from '../components/ui'
+import { CopyButton, Pill } from '../components/ui'
+import { settleUpPlan } from '../lib/calc'
 import { money, monthTitle } from '../lib/format'
 import { downloadSettlementPdf } from '../lib/pdf'
 import { useI18n } from '../lib/i18n'
@@ -19,6 +20,11 @@ export function Settlement() {
 
   const symbol = ws.mess.currency_symbol
   const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const transfers = settleUpPlan(settlement)
+  const planText = [
+    `${ws.mess.name} · ${monthTitle(cycle.month_label)}`,
+    ...transfers.map((transfer) => `${transfer.from} → ${transfer.to}: ${money(transfer.amount, symbol)}`),
+  ].join('\n')
 
   const brandedPdf = async () => {
     setBusy(true)
@@ -101,6 +107,43 @@ export function Settlement() {
               <p className="mt-0.5 text-sm font-extrabold tabular-nums text-ink-900">{stat.value}</p>
             </div>
           ))}
+        </div>
+
+        {/* Balances say what each member is owed; this says who actually hands money to whom. */}
+        <div className="mt-5 rounded-xl border border-ink-100 bg-ink-50/40 p-3 sm:p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold text-ink-900">{t('settle.transfers')}</p>
+              <p className="text-[11px] text-ink-500">
+                {transfers.length
+                  ? t('settle.transfersHint', { count: transfers.length })
+                  : t('settle.noTransfers')}
+              </p>
+            </div>
+            {transfers.length ? (
+              <CopyButton value={planText} label={t('settle.copyPlan')} />
+            ) : null}
+          </div>
+
+          {transfers.length ? (
+            <ul className="mt-2.5 space-y-1.5">
+              {transfers.map((transfer) => (
+                <li
+                  key={`${transfer.fromUserId}-${transfer.toUserId}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-[13px]"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-bold text-ink-900">{transfer.from}</span>
+                    <span className="text-ink-300">→</span>
+                    <span className="truncate font-bold text-brand-700">{transfer.to}</span>
+                  </span>
+                  <span className="shrink-0 font-extrabold tabular-nums text-ink-900">
+                    {money(transfer.amount, symbol)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
 
         <div className="mt-5 space-y-2 xl:hidden print:hidden">

@@ -863,3 +863,75 @@ a credential, not a code edit:
 | 8 | Remaining i18n gaps | PDF labels, toasts, ErrorBoundary copy, chess/dice instructions and WhatsApp templates are still hardcoded English. The Pro dialog was localised in this pass; the rest is a mechanical sweep best done in one commit. |
 
 The Pro tier also still has no billing provider: activation is manual (§22).
+
+---
+
+## 24. Value pass: settle-up, first run, bundle split (24 Nov 2026)
+
+### 24.1 Who pays whom
+
+`settleUpPlan(settlement)` in `src/lib/calc.ts` turns member balances into the actual payments: every
+member in credit is paid by members in debt, largest first. It is greedy matching, not the
+mathematical minimum number of transfers (that problem is NP-hard) — but it never exceeds
+`debtors + creditors - 1` payments, moves exactly `min(total dues, total credit)`, and ignores
+balances under half a paisa so rounding cannot invent a transfer.
+
+The `Settlement` page renders it above the member list as **Who pays whom**, with a **Copy plan**
+button that produces a WhatsApp-ready block (`Mess · Month`, then `A → B: ৳n`). It prints with the
+rest of the statement.
+
+Covered by five tests in `tests/calc.test.ts`: single payer, a member in credit never pays, the
+`members - 1` bound, an already-settled month, and sub-paisa noise.
+
+### 24.2 First run and invites
+
+- `GettingStarted` (Dashboard) shows the four actions that decide whether a new mess sticks:
+  invite a mate, add fixed utilities, log today's meals, record the first bazar. Each row links to the
+  right screen, completed rows are struck through, and the card disappears when all four are done or
+  when the user hides it (`localStorage` key `mm.gettingStarted.<messId>`). The logic is a pure
+  function, `gettingStartedState(ws, cycle, today)` in `src/lib/gettingStarted.ts`, covered by six
+  tests in `tests/gettingStarted.test.ts`.
+- `ShareButton` (ui.tsx) uses `navigator.share` where it exists — the OS sheet opens WhatsApp,
+  Messenger or SMS on a phone — and falls back to the clipboard on desktop. Hub → Settings now offers
+  **Share invite** next to the existing copy button, with the mess name, invite code and app URL in
+  the message.
+
+### 24.3 Bundle split
+
+`vite.config.ts` now pins `react` and `supabase` to their own chunks, `Arena` lazy-loads `ChessGame`
+(so `chess.js` is fetched only when a room opens), and `START_FEN` moved to `src/lib/chess.ts` so
+importing the constant cannot pull the board in. Measured from `npm run build`:
+
+| Chunk | Before | After |
+|---|---|---|
+| entry `index` | 528.4 kB (154.6 kB gzip) | **138.8 kB (43.0 kB gzip)** |
+| `react` vendor | in entry | 164.1 kB (53.6 kB) — cached across deploys |
+| `supabase` vendor | in entry | 230.5 kB (60.1 kB) — cached across deploys |
+| `ChessGame` + chess.js | in entry | 43.6 kB (15.6 kB), on demand |
+| `jspdf` | 390 kB | unchanged (already dynamic) |
+
+The `>500 kB chunk` warning that had been in every build since the audit is gone.
+
+### 24.4 One mess per account, explicitly
+
+`loadWorkspace()` takes a single active membership, so joining a second mess silently hid the first.
+`supabaseBackend.joinMess()` now checks for an existing active membership and refuses with a clear
+message (leave the current mess from Mess Hub → Settings first). This is a guard, not multi-mess
+support — a mess switcher is still the real fix.
+
+### 24.5 Not done from the ranking, and why
+
+| Item | Blocked on |
+|---|---|
+| Verify `005`/`006` against a real Supabase project | Needs a Supabase account/project or a live session — cannot be created from here. |
+| Billing provider (bKash/SSLCommerz or Stripe) | Provider account + keys + a webhook endpoint. The client hole is already closed (§22), so this is additive. |
+| Web Push reminders | Needs VAPID keys and a scheduled Edge Function deploy. |
+| Per-member payment slips, cycle close-out assistant | Not started; the transfer plan covers the main "who pays whom" need first. |
+| Error reporting / analytics | Needs a provider account and DSN. |
+| pgTAP suite, isolated staging project | Needs a local/CI Postgres and a second Supabase project. |
+
+**Verified for this pass:** typecheck pass; `bun test` 42 pass / 0 fail across 6 files; build pass with
+the chunk table above; Settlement transfer card and the Bangla copy checked in the browser at 360 px
+(no horizontal overflow, `Nayeem Chowdhury → Rakib Hasan ৳1,838.56` rendered from the live demo data).
+The first-run checklist was exercised through its unit tests, not visually, because the seeded demo
+mess already has every step complete.
