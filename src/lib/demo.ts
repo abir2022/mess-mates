@@ -512,6 +512,12 @@ export function createDemoBackend(): Backend {
       persist()
     },
 
+    // The demo workspace lives in one browser and has no server to broadcast
+    // from, so there is nothing to subscribe to.
+    subscribe() {
+      return () => undefined
+    },
+
     async loadWorkspace() {
       if (!state.signedIn) return null
       resetIfNeeded()

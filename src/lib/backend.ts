@@ -72,6 +72,12 @@ export interface Backend {
   signInDemo(): Promise<void>
   signOut(): Promise<void>
   loadWorkspace(): Promise<Workspace | null>
+  /**
+   * Live updates: calls back when a row this user is allowed to read changes,
+   * so the app can reload instead of waiting for a manual refresh. Returns the
+   * unsubscribe function. Demo mode has nothing to broadcast and returns a no-op.
+   */
+  subscribe(onChange: () => void): () => void
   createMess(name: string, currency: string): Promise<void>
   joinMess(code: string): Promise<void>
   updateProfile(patch: Partial<Pick<Profile, 'full_name' | 'avatar_frame'>>): Promise<void>

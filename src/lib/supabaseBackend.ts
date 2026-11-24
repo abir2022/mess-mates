@@ -110,8 +110,47 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     return ctx.cycleId
   }
 
+  // ---- Live updates -------------------------------------------------------
+  // One channel for every table the workspace renders. Realtime still applies
+  // RLS, so a member only hears about rows in messes they belong to.
+  const liveTables = [
+    'daily_meals',
+    'bazar_expenses',
+    'bazar_schedule',
+    'fixed_utilities',
+    'member_deposits',
+    'mess_members',
+    'mess_messages',
+    'polls',
+    'poll_votes',
+    'game_rooms',
+    'monthly_cycles',
+    'messes',
+    'profiles',
+  ]
+
+  let liveChannel: ReturnType<typeof supabase.channel> | null = null
+
+  function stopLive() {
+    if (!liveChannel) return
+    void supabase.removeChannel(liveChannel)
+    liveChannel = null
+  }
+
+  function subscribe(onChange: () => void) {
+    stopLive()
+    const channel = supabase.channel('mess-mates-workspace')
+    for (const table of liveTables) {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => onChange())
+    }
+    channel.subscribe()
+    liveChannel = channel
+    return stopLive
+  }
+
   return {
     mode: 'supabase',
+    subscribe,
 
     async currentUser() {
       // A failed OAuth redirect (e.g. the auth server could not create the user)

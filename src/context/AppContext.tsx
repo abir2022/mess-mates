@@ -78,6 +78,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer)
   }, [notice])
 
+  // Live updates: when a mate logs a meal, votes, writes in the board or moves a
+  // chess piece, the row change arrives here and the workspace reloads after a
+  // short debounce, so a burst of writes costs one fetch instead of many.
+  const userId = user?.id ?? null
+  useEffect(() => {
+    if (!userId) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsubscribe = backend.subscribe(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        refresh().catch(() => undefined)
+      }, 600)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [backend, refresh, userId])
+
   const syncNow = useCallback(async () => {
     if (outbox.count() === 0) return
     if (typeof navigator !== 'undefined' && !navigator.onLine) {

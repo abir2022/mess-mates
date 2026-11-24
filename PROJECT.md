@@ -582,7 +582,7 @@ Business model in the code:
 3. **Monetization is not production-safe.** `upgradePro()` is callable by any manager and grants Pro for free; no billing, no server-side entitlement.
 4. **Free archive limit is cosmetic.** The two-cycle cap is a Dashboard dropdown gate; Supabase still returns every cycle, so a modified client can read all history.
 5. **Removal is not a ban.** A removed member can rejoin with the invite code (`join_mess` re-activates).
-6. **No realtime.** Members must refresh to see others' meals, polls, chat or chess moves. Supabase Realtime subscriptions (or polling) would make the "mates" experience genuinely shared.
+6. ~~**No realtime.**~~ **Fixed in code** — the app subscribes to Postgres changes for every workspace table and reloads on a debounce (see §21). Needs migration `005_realtime.sql` run once on the live project; until then it falls back to manual refresh.
 7. **Device reminders are foreground-only.** No Web Push/service-worker push, no scheduled server job; WhatsApp nudges open a prefilled chat and depend on the user pressing send.
 8. **i18n is incomplete** in PDF, toasts, Monetization, game instructions, ErrorBoundary, WhatsApp templates and date-relative labels (see §8.10).
 9. **Dice Duel records the caller as winner.** `finishDice` always sets `winnerUserId: user.id`, so a pass-and-play win by another member is attributed to the device owner. Also awards only once per room, so repeated duels create new rooms (fine) but the winner label can be wrong.
@@ -635,6 +635,7 @@ Business model in the code:
 - [ ] Decide repo visibility and rotate any credential that may have been shared in chat.
 - [ ] Read `src/lib/backend.ts`, `src/lib/calc.ts`, `src/context/AppContext.tsx` first; then the four tabs of `MealsBazar` and `Hub`.
 - [x] CI runs install → typecheck → tests → build on every push and PR (`.github/workflows/ci.yml`, §20).
+- [ ] Run `supabase/migrations/005_realtime.sql` so live updates work (§21).
 - [ ] Before charging money: integrate a real billing provider and move Pro entitlement server-side.
 - [ ] Before growing: add Realtime and push notifications, then address the open issues in §16.
 
@@ -765,3 +766,44 @@ frozen lockfile, typecheck clean, 31 tests pass, build succeeds with the known j
 
 **Not verified:** the workflow has not executed on GitHub yet — the first run after the next push is
 what confirms the runner image, the Bun install and the cache behaviour.
+
+---
+
+## 21. Live updates (24 Nov 2026)
+
+Before this, two mates on two phones only saw each other's meals, votes, chat and chess moves after
+a manual refresh. Now the workspace reloads itself.
+
+**How it works**
+
+1. `Backend.subscribe(onChange)` is part of the backend interface (`src/lib/backend.ts`). Demo mode
+   returns a no-op because the seeded workspace lives in one browser with no server to broadcast
+   from.
+2. `createSupabaseBackend` opens one Realtime channel (`mess-mates-workspace`) and attaches
+   `postgres_changes` with `event: '*'` for every table the workspace renders: `daily_meals`,
+   `bazar_expenses`, `bazar_schedule`, `fixed_utilities`, `member_deposits`, `mess_members`,
+   `mess_messages`, `polls`, `poll_votes`, `game_rooms`, `monthly_cycles`, `messes`, `profiles`.
+   RLS still applies, so a member only hears about rows they may read. Calling `subscribe` again
+   drops the previous channel first; the returned function removes it.
+3. `AppProvider` subscribes once per signed-in user id and reloads through the existing `refresh()`
+   after a **600 ms debounce**, so a burst of writes costs one fetch. The effect unsubscribes on
+   sign-out and on unmount.
+
+**Setup: run `supabase/migrations/005_realtime.sql`.** It adds those tables to the
+`supabase_realtime` publication and sets `replica identity full`. The second part matters: a DELETE
+whose old record only has the primary key cannot be RLS-checked, so Realtime silently drops it —
+without it, collapsing a bazar entry or deleting a poll never reaches other phones. The script is
+idempotent (it swallows `duplicate_object`), so it is safe to re-run.
+
+**Known trade-offs**
+
+- One reload per change burst, not a delta merge: simple and always consistent, but every change
+  re-reads the whole workspace snapshot.
+- `replica identity full` writes more WAL per update on the listed tables. Fine at mess scale.
+- The offline outbox replays straight to the backend; the resulting row changes come back through
+  the channel like any other write.
+
+**Not verified:** no live two-account test was run (there is no Supabase session available to the
+assistant), and `005_realtime.sql` has not been applied to the live project. To check it: apply the
+migration, sign in on two devices, log a meal on one and watch the other's meal rate update within a
+second or two without touching refresh.
