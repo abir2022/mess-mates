@@ -2,12 +2,17 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type {
   BazarDuty,
   BazarExpense,
+  ClientError,
   DailyMeal,
+  DepositRequest,
   FixedUtility,
   GameRoom,
   GameType,
+  ManagerTerm,
   MemberDeposit,
+  MemberRequest,
   Mess,
+  MessBan,
   MessMember,
   MessMessage,
   MonthlyCycle,
@@ -16,7 +21,18 @@ import type {
   Profile,
   Workspace,
 } from './types'
-import type { Backend, BazarInput, DepositInput, DutyInput, GamePatch, MealInput, PollInput, UtilityInput } from './backend'
+import type {
+  Backend,
+  BazarInput,
+  DayMealInput,
+  DepositInput,
+  DepositRequestInput,
+  DutyInput,
+  GamePatch,
+  MealInput,
+  PollInput,
+  UtilityInput,
+} from './backend'
 
 type Row = Record<string, unknown>
 
@@ -127,6 +143,10 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     'monthly_cycles',
     'messes',
     'profiles',
+    'member_requests',
+    'mess_bans',
+    'manager_terms',
+    'deposit_requests',
   ]
 
   let liveChannel: ReturnType<typeof supabase.channel> | null = null
@@ -280,6 +300,17 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         ? await supabase.from('poll_votes').select('*').in('poll_id', pollIds)
         : { data: [] as PollVote[] }
 
+      // Governance tables arrive with 007. On a project that has not run it
+      // yet these queries fail quietly and the app behaves as before.
+      const [requestRows, banRows, termRows, depositRequestRows] = await Promise.all([
+        supabase.from('member_requests').select('*').eq('mess_id', messId).order('created_at', { ascending: false }),
+        supabase.from('mess_bans').select('*').eq('mess_id', messId),
+        supabase.from('manager_terms').select('*').eq('mess_id', messId).order('starts_on', { ascending: false }),
+        cycleIds.length
+          ? supabase.from('deposit_requests').select('*').in('cycle_id', cycleIds)
+          : Promise.resolve({ data: [] }),
+      ])
+
       const openCycle = cycles.find((cycle) => cycle.status === 'open') ?? cycles[0] ?? null
       context = { messId, cycleId: openCycle?.id ?? null }
 
@@ -297,6 +328,11 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       const polls: Poll[] = rowList(pollRows.data).map((row) => ({
         ...(row as unknown as Poll),
         options: (row.options_json as string[] | undefined) ?? [],
+        kind: (row.kind as Poll['kind'] | undefined) ?? 'general',
+        candidate_ids: (row.candidate_ids as string[] | undefined) ?? [],
+        quorum: Number(row.quorum ?? 0.8),
+        result_applied: Boolean(row.result_applied ?? false),
+        target_user_id: (row.target_user_id as string | null | undefined) ?? null,
       }))
 
       const games: GameRoom[] = rowList(gameRows.data).map((row) => ({
@@ -318,6 +354,10 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         votes: (voteRows ?? []) as PollVote[],
         messages: (messageRows.data ?? []) as MessMessage[],
         games,
+        requests: rowList(requestRows.data) as unknown as MemberRequest[],
+        bans: rowList(banRows.data) as unknown as MessBan[],
+        managerTerms: rowList(termRows.data) as unknown as ManagerTerm[],
+        depositRequests: rowList(depositRequestRows.data) as unknown as DepositRequest[],
         leaderboard: (
           (leaderboardRows.data ?? []) as {
             id: string
@@ -406,6 +446,27 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         })
         if (error) throw new Error(error.message)
       }
+    },
+
+    async setDayMeals(rows: DayMealInput[]) {
+      if (!rows.length) return
+      const cycleId = await requireCycleId()
+      const payload = rows.map((row) => ({
+        cycle_id: cycleId,
+        user_id: row.userId,
+        date: row.date,
+        breakfast: Math.max(0, Math.round(row.breakfast * 2) / 2),
+        lunch: Math.max(0, Math.round(row.lunch * 2) / 2),
+        dinner: Math.max(0, Math.round(row.dinner * 2) / 2),
+        guest_meals: Math.max(0, Math.round(row.guest_meals * 2) / 2),
+      }))
+      // One statement for the whole day; the unique (cycle, member, date)
+      // constraint decides insert vs update, and the meal-lock trigger still
+      // guards each row.
+      const { error } = await supabase
+        .from('daily_meals')
+        .upsert(payload, { onConflict: 'cycle_id,user_id,date' })
+      if (error) throw new Error(error.message)
     },
 
     async addBazar(input: BazarInput) {
@@ -637,6 +698,91 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       const { error } = await supabase.rpc('leave_mess')
       if (error) throw new Error(error.message)
       context = null
+    },
+
+    // ---- Governance ------------------------------------------------------
+
+    async requestLeave(kind, note = '') {
+      const { error } = await supabase.rpc('create_member_request', { p_kind: kind, p_note: note })
+      if (error) throw new Error(error.message)
+    },
+
+    async withdrawMemberRequest(id) {
+      const { error } = await supabase.rpc('withdraw_member_request', { p_request: id })
+      if (error) throw new Error(error.message)
+    },
+
+    async decideMemberRequest(id, approve, note = '') {
+      const { error } = await supabase.rpc('decide_member_request', {
+        p_request: id,
+        p_approve: approve,
+        p_note: note,
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async leaveMessAnyway() {
+      const { error } = await supabase.rpc('leave_mess_override')
+      if (error) throw new Error(error.message)
+      context = null
+    },
+
+    async createGovernancePoll(kind, targetUserId, candidateIds, closesAt) {
+      const { error } = await supabase.rpc('create_governance_poll', {
+        p_kind: kind,
+        p_target: targetUserId,
+        p_candidate_ids: candidateIds,
+        p_closes_at: closesAt,
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async applyPollResult(pollId) {
+      const { data, error } = await supabase.rpc('apply_poll_result', { p_poll: pollId })
+      if (error) throw new Error(error.message)
+      return String(data ?? '')
+    },
+
+    async requestDeposit(input: DepositRequestInput) {
+      const cycleId = await requireCycleId()
+      const { error } = await supabase.rpc('request_deposit', {
+        p_cycle: cycleId,
+        p_amount: input.amount,
+        p_date: input.date,
+        p_note: input.note,
+        p_method: input.method ?? 'bkash',
+        p_reference: input.reference ?? '',
+        p_proof: input.proofPath ?? null,
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async decideDepositRequest(id, approve) {
+      const { error } = await supabase.rpc('decide_deposit_request', { p_request: id, p_approve: approve })
+      if (error) throw new Error(error.message)
+    },
+
+    async cancelDepositRequest(id) {
+      const { error } = await supabase.rpc('cancel_deposit_request', { p_request: id })
+      if (error) throw new Error(error.message)
+    },
+
+    async deleteAccount() {
+      const { error } = await supabase.rpc('delete_my_account')
+      if (error) throw new Error(error.message)
+      context = null
+    },
+
+    async loadClientErrors() {
+      const ctx = await requireContext()
+      const { data, error } = await supabase
+        .from('client_errors')
+        .select('*')
+        .eq('mess_id', ctx.messId)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (error) throw new Error(error.message)
+      return (data ?? []) as ClientError[]
     },
 
     async unlockFrame(frame) {

@@ -1,4 +1,4 @@
-import type { Settlement } from './calc'
+import { computeSettlement, type Settlement } from './calc'
 import { monthTitle } from './format'
 import type { MonthlyCycle, Workspace } from './types'
 
@@ -100,5 +100,83 @@ export function settlementCsv(ws: Workspace, cycle: MonthlyCycle, settlement: Se
 export function downloadSettlementCsv(ws: Workspace, cycle: MonthlyCycle, settlement: Settlement): string {
   const name = `mess-mates-${slug(ws.mess.name)}-${slug(monthTitle(cycle.month_label))}.csv`
   save(name, settlementCsv(ws, cycle, settlement), 'text/csv;charset=utf-8')
+  return name
+}
+
+/**
+ * One member's complete accounting, for a mess admin to hand over when somebody
+ * leaves without waiting for approval. Everything that still points at that
+ * member stays in the mess, so this is their copy of it.
+ */
+export function memberStatementCsv(ws: Workspace, userId: string): string {
+  const symbol = ws.mess.currency_symbol
+  const member = ws.members.find((entry) => entry.user_id === userId)
+  const name = member?.profile.full_name ?? 'Member'
+  const rows: (string | number)[][] = [
+    ['Mess Mates member statement'],
+    ['Mess', ws.mess.name],
+    ['Member', name],
+    ['Joined', member?.joined_at.slice(0, 10) ?? ''],
+    ['Status', member?.status ?? 'left'],
+    ['Exported', new Date().toISOString().slice(0, 10)],
+    [],
+    ['Month', 'Cycle', 'Meals', `Meal cost (${symbol})`, `Utility (${symbol})`, `Payable (${symbol})`, `Deposits (${symbol})`, `Carried (${symbol})`, `Balance (${symbol})`],
+  ]
+
+  const cycles = [...ws.cycles].sort((a, b) => a.month_label.localeCompare(b.month_label))
+  for (const cycle of cycles) {
+    const row = computeSettlement(ws, cycle.id).members.find((entry) => entry.userId === userId)
+    rows.push([
+      monthTitle(cycle.month_label),
+      cycle.status,
+      row?.meals ?? 0,
+      row?.mealCost ?? 0,
+      row?.utilityShare ?? 0,
+      row?.payable ?? 0,
+      row?.deposits ?? 0,
+      row?.carriedBalance ?? 0,
+      row?.balance ?? 0,
+    ])
+  }
+
+  rows.push([], ['Meals logged'])
+  rows.push(['Date', 'Breakfast', 'Lunch', 'Dinner', 'Guest', 'Month'])
+  const cyclesById = new Map(ws.cycles.map((cycle) => [cycle.id, cycle]))
+  for (const meal of ws.meals.filter((entry) => entry.user_id === userId).sort((a, b) => a.date.localeCompare(b.date))) {
+    rows.push([
+      meal.date,
+      meal.breakfast,
+      meal.lunch,
+      meal.dinner,
+      meal.guest_meals,
+      cyclesById.get(meal.cycle_id)?.month_label ?? '',
+    ])
+  }
+
+  rows.push([], ['Bazar paid'])
+  rows.push(['Date', 'Items', 'Status', `Amount (${symbol})`])
+  for (const expense of ws.bazar
+    .filter((entry) => entry.buyer_id === userId)
+    .sort((a, b) => a.expense_date.localeCompare(b.expense_date))) {
+    rows.push([expense.expense_date, expense.items_summary, expense.status, expense.amount])
+  }
+
+  rows.push([], ['Deposits'])
+  rows.push(['Date', 'Note', 'Method', 'Reference', `Amount (${symbol})`])
+  for (const deposit of ws.deposits
+    .filter((entry) => entry.user_id === userId)
+    .sort((a, b) => a.paid_date.localeCompare(b.paid_date))) {
+    rows.push([deposit.paid_date, deposit.note, deposit.method, deposit.reference, deposit.amount])
+  }
+
+  const body = rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
+  return `\uFEFF${body}\r\n`
+}
+
+export function downloadMemberStatement(ws: Workspace, userId: string): string {
+  const name = `mess-mates-${slug(ws.mess.name)}-${slug(
+    ws.members.find((entry) => entry.user_id === userId)?.profile.full_name ?? 'member',
+  )}-statement.csv`
+  save(name, memberStatementCsv(ws, userId), 'text/csv;charset=utf-8')
   return name
 }

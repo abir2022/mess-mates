@@ -1,4 +1,4 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Check, Copy, Loader2, Minus, Plus, Share2, X } from 'lucide-react'
 import { frameRing } from '../lib/backend'
 import { initials } from '../lib/format'
@@ -59,6 +59,9 @@ export function IconButton({
   )
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function Modal({
   open,
   onClose,
@@ -76,19 +79,51 @@ export function Modal({
   footer?: ReactNode
   wide?: boolean
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  // Escape, body scroll lock and a focus trap. Opening moves focus into the
+  // sheet; Tab cycles inside it; closing sends focus back to whatever opened
+  // it, so keyboard users never fall behind an overlay.
   useEffect(() => {
     if (!open) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
     const previousOverflow = document.body.style.overflow
+    const previousFocus = document.activeElement as HTMLElement | null
     document.body.style.overflow = 'hidden'
+
+    const node = dialogRef.current
+    const first = node?.querySelector<HTMLElement>(FOCUSABLE)
+    ;(first ?? node)?.focus()
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (item) => item.offsetParent !== null,
+      )
+      if (items.length === 0) return
+      const firstItem = items[0]
+      const lastItem = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === firstItem) {
+        event.preventDefault()
+        lastItem.focus()
+      } else if (!event.shiftKey && document.activeElement === lastItem) {
+        event.preventDefault()
+        firstItem.focus()
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = previousOverflow
+      if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -99,7 +134,9 @@ export function Modal({
       role="presentation"
     >
       <div
-        className={`animate-sheet-up max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white shadow-lift sm:animate-fade-up sm:rounded-3xl ${
+        ref={dialogRef}
+        tabIndex={-1}
+        className={`animate-sheet-up max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white shadow-lift outline-none sm:animate-fade-up sm:rounded-3xl ${
           wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'
         }`}
         onClick={(event) => event.stopPropagation()}

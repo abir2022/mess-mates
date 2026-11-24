@@ -6,6 +6,10 @@ export type SplitType = 'equal' | 'custom'
 export type DutyStatus = 'upcoming' | 'completed' | 'missed'
 export type GameType = 'chess' | 'dice' | 'challenge'
 export type DepositMethod = 'cash' | 'bkash' | 'nagad' | 'bank' | 'other'
+export type PollKind = 'general' | 'member_removal' | 'manager_selection'
+export type MemberRequestKind = 'leave' | 'delete'
+export type MemberRequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'auto_left'
+export type DepositRequestStatus = 'pending' | 'approved' | 'rejected'
 
 export interface Profile {
   id: string
@@ -108,6 +112,76 @@ export interface Poll {
   closes_at: string
   created_by: string
   created_at: string
+  /** Ordinary polls are open; the other two carry a rule the app enforces. */
+  kind: PollKind
+  target_user_id: string | null
+  /** User ids behind the option labels of a manager election. */
+  candidate_ids: string[]
+  /** Share of active members who must vote, 0.8 by default. */
+  quorum: number
+  result_applied: boolean
+}
+
+export interface MemberRequest {
+  id: string
+  mess_id: string
+  user_id: string
+  member_id: string
+  kind: MemberRequestKind
+  status: MemberRequestStatus
+  note: string
+  decided_by: string | null
+  decided_at: string | null
+  created_at: string
+}
+
+export interface MessBan {
+  id: string
+  mess_id: string
+  user_id: string
+  reason: string
+  banned_by: string | null
+  created_at: string
+}
+
+export interface ManagerTerm {
+  id: string
+  mess_id: string
+  user_id: string
+  starts_on: string
+  ends_on: string | null
+  note: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface DepositRequest {
+  id: string
+  cycle_id: string
+  user_id: string
+  amount: number
+  paid_date: string
+  note: string
+  method: DepositMethod
+  reference: string
+  proof_path: string | null
+  status: DepositRequestStatus
+  requested_by: string | null
+  decided_by: string | null
+  decided_at: string | null
+  created_at: string
+}
+
+export interface ClientError {
+  id: string
+  user_id: string | null
+  mess_id: string | null
+  message: string
+  stack: string
+  route: string
+  user_agent: string
+  app_version: string
+  created_at: string
 }
 
 export interface PollVote {
@@ -164,6 +238,10 @@ export interface Workspace {
   messages: MessMessage[]
   games: GameRoom[]
   leaderboard: LeaderboardRow[]
+  requests: MemberRequest[]
+  bans: MessBan[]
+  managerTerms: ManagerTerm[]
+  depositRequests: DepositRequest[]
 }
 
 export type MealField = 'breakfast' | 'lunch' | 'dinner' | 'guest_meals'

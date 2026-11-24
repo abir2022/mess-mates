@@ -2,11 +2,15 @@ import type {
   BazarDuty,
   BazarExpense,
   DailyMeal,
+  DepositRequest,
   FixedUtility,
   GameRoom,
   GameType,
+  ManagerTerm,
   MemberDeposit,
+  MemberRequest,
   Mess,
+  MessBan,
   MessMember,
   MessMessage,
   MonthlyCycle,
@@ -16,7 +20,19 @@ import type {
   Role,
   Workspace,
 } from './types'
-import type { Backend, BazarInput, DepositInput, DutyInput, GamePatch, MealInput, PollInput, UtilityInput } from './backend'
+import type {
+  Backend,
+  BazarInput,
+  DayMealInput,
+  DepositInput,
+  DepositRequestInput,
+  DutyInput,
+  GamePatch,
+  MealInput,
+  PollInput,
+  UtilityInput,
+} from './backend'
+import { managerWinner, pollProgress, removalVerdict } from './governance'
 import { monthLabelFor, todayISO } from './format'
 
 const STORAGE_KEY = 'messmates.demo.v1'
@@ -38,6 +54,10 @@ interface DemoState {
   messages: MessMessage[]
   games: GameRoom[]
   leaderboard: { id: string; name: string; guild_points: number; guild_emblem: string; guild_banner: string }[]
+  requests: MemberRequest[]
+  bans: MessBan[]
+  managerTerms: ManagerTerm[]
+  depositRequests: DepositRequest[]
 }
 
 const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`
@@ -316,6 +336,11 @@ function seedState(): DemoState {
         closes_at: new Date(Date.now() + 2 * 86400_000).toISOString(),
         created_by: 'u-rakib',
         created_at: hoursAgo(20),
+        kind: 'general',
+        target_user_id: null,
+        candidate_ids: [],
+        quorum: 0.8,
+        result_applied: false,
       },
       {
         id: 'poll-2',
@@ -325,6 +350,56 @@ function seedState(): DemoState {
         closes_at: new Date(Date.now() + 3 * 86400_000).toISOString(),
         created_by: 'u-abir',
         created_at: hoursAgo(6),
+        kind: 'general',
+        target_user_id: null,
+        candidate_ids: [],
+        quorum: 0.8,
+        result_applied: false,
+      },
+    ],
+    requests: [
+      {
+        id: 'request-1',
+        mess_id: 'mess-chittagong',
+        user_id: 'u-nayeem',
+        member_id: 'member-u-nayeem',
+        kind: 'leave',
+        status: 'pending',
+        note: 'Moving to a new city next month.',
+        decided_by: null,
+        decided_at: null,
+        created_at: hoursAgo(14),
+      },
+    ],
+    bans: [],
+    managerTerms: [
+      {
+        id: 'term-1',
+        mess_id: 'mess-chittagong',
+        user_id: 'u-rakib',
+        starts_on: isoAt(DEMO_MONTH, 1),
+        ends_on: null,
+        note: 'Elected by member vote',
+        created_by: 'u-abir',
+        created_at: hoursAgo(24 * 20),
+      },
+    ],
+    depositRequests: [
+      {
+        id: 'deposit-request-1',
+        cycle_id: currentCycleId,
+        user_id: 'u-tanvir',
+        amount: 2000,
+        paid_date: todayISO(),
+        note: 'Cash handed to Rakib before bazar',
+        method: 'cash',
+        reference: '',
+        proof_path: null,
+        status: 'pending',
+        requested_by: 'u-tanvir',
+        decided_by: null,
+        decided_at: null,
+        created_at: hoursAgo(4),
       },
     ],
     votes: [
@@ -399,12 +474,31 @@ function seedState(): DemoState {
   }
 }
 
+/** Older demo snapshots predate governance; fill in what they are missing. */
+function normalize(parsed: DemoState): DemoState {
+  return {
+    ...parsed,
+    polls: (parsed.polls ?? []).map((poll) => ({
+      ...poll,
+      kind: poll.kind ?? 'general',
+      target_user_id: poll.target_user_id ?? null,
+      candidate_ids: poll.candidate_ids ?? [],
+      quorum: Number(poll.quorum ?? 0.8),
+      result_applied: Boolean(poll.result_applied),
+    })),
+    requests: parsed.requests ?? [],
+    bans: parsed.bans ?? [],
+    managerTerms: parsed.managerTerms ?? [],
+    depositRequests: parsed.depositRequests ?? [],
+  }
+}
+
 function load(): DemoState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as DemoState
-      if (parsed?.mess?.id && parsed.profile?.id) return parsed
+      if (parsed?.mess?.id && parsed.profile?.id) return normalize(parsed)
     }
   } catch {
     /* ignore corrupt demo state */
@@ -469,6 +563,10 @@ export function createDemoBackend(): Backend {
     messages: state.messages,
     games: state.games,
     leaderboard: state.leaderboard.map((row) => ({ ...row, is_own: row.id === state.mess.id })),
+    requests: state.requests,
+    bans: state.bans,
+    managerTerms: state.managerTerms,
+    depositRequests: state.depositRequests,
   })
 
   const resetIfNeeded = () => {
@@ -565,6 +663,10 @@ export function createDemoBackend(): Backend {
       state.votes = []
       state.messages = []
       state.games = []
+      state.requests = []
+      state.bans = []
+      state.managerTerms = []
+      state.depositRequests = []
       syncLeaderboardRow()
       persist()
     },
@@ -623,6 +725,31 @@ export function createDemoBackend(): Backend {
           guest_meals: 0,
           [input.field]: value,
         })
+      }
+      persist()
+    },
+
+    async setDayMeals(rows: DayMealInput[]) {
+      const cycle = activeCycle()
+      for (const row of rows) {
+        const existing = state.meals.find(
+          (meal) => meal.cycle_id === cycle.id && meal.user_id === row.userId && meal.date === row.date,
+        )
+        const values = {
+          breakfast: Math.max(0, Math.round(row.breakfast * 2) / 2),
+          lunch: Math.max(0, Math.round(row.lunch * 2) / 2),
+          dinner: Math.max(0, Math.round(row.dinner * 2) / 2),
+          guest_meals: Math.max(0, Math.round(row.guest_meals * 2) / 2),
+        }
+        if (existing) Object.assign(existing, values)
+        else
+          state.meals.push({
+            id: uid('meal'),
+            cycle_id: cycle.id,
+            user_id: row.userId,
+            date: row.date,
+            ...values,
+          })
       }
       persist()
     },
@@ -734,6 +861,11 @@ export function createDemoBackend(): Backend {
         closes_at: input.closesAt,
         created_by: state.profile.id,
         created_at: new Date().toISOString(),
+        kind: 'general',
+        target_user_id: null,
+        candidate_ids: [],
+        quorum: 0.8,
+        result_applied: false,
       })
       persist()
     },
@@ -838,38 +970,311 @@ export function createDemoBackend(): Backend {
       persist()
     },
 
-    async removeMember(memberId: string) {
-      const mine = myRole()
-      if (!['admin', 'manager'].includes(mine)) {
-        throw new Error('Only an admin or manager can remove a member.')
-      }
-      const target = state.members.find((member) => member.id === memberId)
-      if (!target) throw new Error('That member is no longer in the mess.')
-      if (target.user_id === state.profile.id) {
-        throw new Error('Use "Leave this mess" to remove yourself.')
-      }
-      if (target.role === 'admin' && mine !== 'admin') {
-        throw new Error('Only an admin can remove another admin.')
-      }
-      const admins = state.members.filter((member) => member.status === 'active' && member.role === 'admin')
-      if (target.role === 'admin' && admins.length <= 1) {
-        throw new Error('Keep at least one admin in the mess.')
-      }
-      target.status = 'left'
-      persist()
+    async removeMember() {
+      throw new Error('Removing a member needs a removal poll. Open one from Mess Hub → Council.')
     },
 
     async leaveMess() {
+      throw new Error(
+        'Leaving now needs a leave request: Mess Hub → Council. An admin can approve it, or you can leave without waiting.',
+      )
+    },
+
+    async requestLeave(kind, note = '') {
       const mine = state.members.find(
         (member) => member.user_id === state.profile.id && member.status === 'active',
       )
+      if (!mine) throw new Error('You are not in a mess.')
+      if (state.requests.some((request) => request.user_id === state.profile.id && request.status === 'pending')) {
+        throw new Error('You already have a request waiting for the admin.')
+      }
+      state.requests.unshift({
+        id: uid('request'),
+        mess_id: state.mess.id,
+        user_id: state.profile.id,
+        member_id: mine.id,
+        kind,
+        status: 'pending',
+        note,
+        decided_by: null,
+        decided_at: null,
+        created_at: new Date().toISOString(),
+      })
+      persist()
+    },
+
+    async withdrawMemberRequest(id) {
+      const request = state.requests.find(
+        (entry) => entry.id === id && entry.user_id === state.profile.id && entry.status === 'pending',
+      )
+      if (!request) throw new Error('That request is no longer pending.')
+      request.status = 'withdrawn'
+      request.decided_at = new Date().toISOString()
+      persist()
+    },
+
+    async decideMemberRequest(id, approve, note = '') {
+      if (myRole() !== 'admin') throw new Error('Only a mess admin can decide this request.')
+      const request = state.requests.find((entry) => entry.id === id && entry.mess_id === state.mess.id)
+      if (!request || request.status !== 'pending') throw new Error('That request was already handled.')
+      const target = state.members.find((member) => member.id === request.member_id)
+      if (!target) throw new Error('That member is no longer in the mess.')
+
+      if (approve) {
+        const admins = state.members.filter((member) => member.status === 'active' && member.role === 'admin')
+        if (target.role === 'admin' && admins.length <= 1) {
+          throw new Error('Keep at least one admin in the mess.')
+        }
+        target.status = 'left'
+      }
+
+      request.status = approve ? 'approved' : 'rejected'
+      request.decided_by = state.profile.id
+      request.decided_at = new Date().toISOString()
+      if (note) request.note = note
+      persist()
+    },
+
+    async leaveMessAnyway() {
+      const request = state.requests.find(
+        (entry) => entry.user_id === state.profile.id && entry.status === 'pending',
+      )
+      if (!request) throw new Error('Send a leave request first.')
+      if (request.kind === 'delete') {
+        throw new Error('An account deletion request needs the admin to approve it.')
+      }
+      const mine = state.members.find((member) => member.id === request.member_id)
       if (!mine) return
       const admins = state.members.filter((member) => member.status === 'active' && member.role === 'admin')
       if (mine.role === 'admin' && admins.length <= 1) {
         throw new Error('Make another member an admin before you leave.')
       }
       mine.status = 'left'
+      request.status = 'auto_left'
+      request.decided_at = new Date().toISOString()
       persist()
+    },
+
+    async createGovernancePoll(kind, targetUserId, candidateIds, closesAt) {
+      if (myRole() !== 'admin') throw new Error('Only an admin can open this poll.')
+      const close = new Date(closesAt)
+      if (Number.isNaN(close.getTime()) || close.getTime() <= Date.now()) {
+        throw new Error('Pick a closing time in the future.')
+      }
+
+      let options: string[] = []
+      let candidates: string[] = []
+      let question = ''
+      let target: string | null = null
+
+      if (kind === 'member_removal') {
+        if (!targetUserId) throw new Error('Pick the member this poll is about.')
+        if (targetUserId === state.profile.id) throw new Error('You cannot open a removal poll about yourself.')
+        const member = state.members.find(
+          (entry) => entry.user_id === targetUserId && entry.status === 'active',
+        )
+        if (!member) throw new Error('That member is no longer active.')
+        if (
+          state.polls.some(
+            (poll) =>
+              poll.kind === 'member_removal' &&
+              poll.target_user_id === targetUserId &&
+              !poll.result_applied &&
+              new Date(poll.closes_at).getTime() > Date.now(),
+          )
+        ) {
+          throw new Error('A removal poll for that member is already open.')
+        }
+        options = ['Remove from mess', 'Keep in mess']
+        question = `Remove ${member.profile.full_name} from the mess?`
+        target = targetUserId
+      } else {
+        candidates = candidateIds.length
+          ? candidateIds.filter((id) =>
+              state.members.some((member) => member.user_id === id && member.status === 'active'),
+            )
+          : state.members.filter((member) => member.status === 'active').map((member) => member.user_id)
+        if (candidates.length < 2) throw new Error('A manager election needs at least two candidates.')
+        options = candidates.map(
+          (id) => state.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member',
+        )
+        question = 'Who should be the mess manager?'
+      }
+
+      state.polls.unshift({
+        id: uid('poll'),
+        mess_id: state.mess.id,
+        question,
+        options,
+        closes_at: close.toISOString(),
+        created_by: state.profile.id,
+        created_at: new Date().toISOString(),
+        kind,
+        target_user_id: target,
+        candidate_ids: candidates,
+        quorum: 0.8,
+        result_applied: false,
+      })
+      persist()
+    },
+
+    async applyPollResult(pollId) {
+      if (myRole() !== 'admin') throw new Error('Only an admin can apply a poll result.')
+      const poll = state.polls.find((entry) => entry.id === pollId)
+      if (!poll) throw new Error('Poll not found')
+      if (poll.kind === 'general') throw new Error('This is an ordinary poll; there is no result to apply.')
+      if (poll.result_applied) throw new Error('This poll result was already applied.')
+      if (new Date(poll.closes_at).getTime() > Date.now()) {
+        throw new Error('Wait for the poll to close before applying its result.')
+      }
+
+      const active = state.members.filter((member) => member.status === 'active')
+      const progress = pollProgress(poll, state.votes, active.length)
+      if (!progress.quorumMet) {
+        throw new Error(
+          `Only ${progress.votes} of ${progress.activeMembers} active members voted. At least ${progress.required} votes are needed.`,
+        )
+      }
+
+      if (poll.kind === 'member_removal') {
+        const verdict = removalVerdict(poll, state.votes, active.length)
+        if (verdict === 'waiting') throw new Error('The vote did not decide a removal.')
+        const member = state.members.find(
+          (entry) => entry.user_id === poll.target_user_id && entry.status === 'active',
+        )
+        if (!member) throw new Error('That member already left the mess.')
+        const admins = state.members.filter((entry) => entry.status === 'active' && entry.role === 'admin')
+        if (member.role === 'admin' && admins.length <= 1) {
+          throw new Error('Keep at least one admin in the mess.')
+        }
+
+        member.status = 'left'
+        if (verdict === 'remove_and_ban') {
+          if (!state.bans.some((ban) => ban.user_id === member.user_id)) {
+            state.bans.push({
+              id: uid('ban'),
+              mess_id: state.mess.id,
+              user_id: member.user_id,
+              reason: 'Removed by a member vote',
+              banned_by: state.profile.id,
+              created_at: new Date().toISOString(),
+            })
+          }
+        } else {
+          state.bans = state.bans.filter((ban) => ban.user_id !== member.user_id)
+        }
+        poll.result_applied = true
+        persist()
+        return verdict === 'remove_and_ban' ? 'removed_and_banned' : 'removed_can_rejoin'
+      }
+
+      const winnerId = managerWinner(poll, state.votes, active.length)
+      if (!winnerId) throw new Error('The vote did not elect a manager.')
+
+      state.managerTerms.forEach((term) => {
+        if (!term.ends_on) {
+          const yesterday = new Date()
+          yesterday.setDate(yesterday.getDate() - 1)
+          term.ends_on = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(
+            yesterday.getDate(),
+          ).padStart(2, '0')}`
+        }
+      })
+      state.members.forEach((member) => {
+        if (member.status === 'active' && member.role === 'manager') member.role = 'member'
+      })
+      const winner = state.members.find((member) => member.user_id === winnerId && member.status === 'active')
+      if (!winner) throw new Error('The winning candidate is no longer active.')
+      winner.role = 'manager'
+      state.managerTerms.unshift({
+        id: uid('term'),
+        mess_id: state.mess.id,
+        user_id: winnerId,
+        starts_on: todayISO(),
+        ends_on: null,
+        note: 'Elected by member vote',
+        created_by: state.profile.id,
+        created_at: new Date().toISOString(),
+      })
+      poll.result_applied = true
+      persist()
+      return 'manager_elected'
+    },
+
+    async requestDeposit(input: DepositRequestInput) {
+      const cycle = activeCycle()
+      if (cycle.status === 'closed') throw new Error('This monthly cycle is closed.')
+      if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('Enter the amount you paid.')
+      state.depositRequests.unshift({
+        id: uid('deposit-request'),
+        cycle_id: cycle.id,
+        user_id: state.profile.id,
+        amount: input.amount,
+        paid_date: input.date,
+        note: input.note,
+        method: input.method ?? 'bkash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
+        status: 'pending',
+        requested_by: state.profile.id,
+        decided_by: null,
+        decided_at: null,
+        created_at: new Date().toISOString(),
+      })
+      persist()
+    },
+
+    async decideDepositRequest(id, approve) {
+      if (!isManager()) throw new Error('Only the mess manager can approve payments.')
+      const request = state.depositRequests.find((entry) => entry.id === id)
+      if (!request || request.status !== 'pending') throw new Error('That payment was already handled.')
+      if (approve) {
+        state.deposits.push({
+          id: uid('dep'),
+          cycle_id: request.cycle_id,
+          user_id: request.user_id,
+          amount: request.amount,
+          paid_date: request.paid_date,
+          note: request.note,
+          method: request.method,
+          reference: request.reference,
+          proof_path: request.proof_path,
+        })
+      }
+      request.status = approve ? 'approved' : 'rejected'
+      request.decided_by = state.profile.id
+      request.decided_at = new Date().toISOString()
+      persist()
+    },
+
+    async cancelDepositRequest(id) {
+      state.depositRequests = state.depositRequests.filter(
+        (entry) => !(entry.id === id && entry.user_id === state.profile.id && entry.status === 'pending'),
+      )
+      persist()
+    },
+
+    async deleteAccount() {
+      if (state.members.some((member) => member.user_id === state.profile.id && member.status === 'active')) {
+        throw new Error('Leave your mess first — ask the admin to approve your leave request.')
+      }
+      state.profile = {
+        ...state.profile,
+        full_name: 'Former member',
+        email: '',
+        avatar_url: null,
+        avatar_frame: 'ring',
+        frame_unlocked_until: null,
+      }
+      state.members = state.members.map((member) =>
+        member.user_id === state.profile.id ? { ...member, profile: state.profile } : member,
+      )
+      state.signedIn = false
+      persist()
+    },
+
+    async loadClientErrors() {
+      return []
     },
 
     async unlockFrame(frame) {

@@ -19,6 +19,7 @@ import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
 import { Avatar, Button, EmptyState, Modal, Pill, SectionHeading, Tabs } from '../components/ui'
 import { START_FEN } from '../lib/chess'
+import { pollProgress } from '../lib/governance'
 import { DiceDuel } from '../components/DiceDuel'
 import { avatarFrames, bannerClass, guildBanners, guildEmblems } from '../lib/backend'
 import { timeAgo } from '../lib/format'
@@ -93,6 +94,7 @@ function PollsTab() {
   const canManage = myRole === 'admin' || myRole === 'manager'
   const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
   const polls = [...ws.polls].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  const activeMembers = ws.members.filter((member) => member.status === 'active').length
 
   const reset = () => {
     setQuestion('')
@@ -140,11 +142,36 @@ function PollsTab() {
                       {t('arena.by', { name: nameOf(poll.created_by), status: t(status.key, status.vars) })}
                     </p>
                   </div>
-                  <Pill tone={status.closed ? 'neutral' : 'brand'}>
-                    {status.closed ? <Lock className="h-3 w-3" /> : <Vote className="h-3 w-3" />}{' '}
-                    {t('arena.votes', { count: total })}
-                  </Pill>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Pill tone={status.closed ? 'neutral' : 'brand'}>
+                      {status.closed ? <Lock className="h-3 w-3" /> : <Vote className="h-3 w-3" />}{' '}
+                      {t('arena.votes', { count: total })}
+                    </Pill>
+                    {poll.kind !== 'general' ? (
+                      <Pill tone="gold">
+                        {poll.kind === 'member_removal' ? t('gov.removal') : t('gov.electionTitle')}
+                      </Pill>
+                    ) : null}
+                  </div>
                 </div>
+
+                {poll.kind !== 'general' ? (
+                  (() => {
+                    const progress = pollProgress(poll, votes, activeMembers)
+                    return (
+                      <p className="mt-2 text-[10px] font-semibold text-ink-500">
+                        {t('gov.turnout', {
+                          votes: progress.votes,
+                          members: progress.activeMembers,
+                          required: progress.required,
+                        })}
+                        {progress.quorumMet
+                          ? ` · ${t('gov.quorumMet')}`
+                          : ` · ${t('gov.quorumMissing', { count: Math.max(0, progress.required - progress.votes) })}`}
+                      </p>
+                    )
+                  })()
+                ) : null}
 
                 <div className="mt-3 space-y-2">
                   {poll.options.map((option, index) => {
@@ -187,7 +214,7 @@ function PollsTab() {
                         ? t('arena.votingClosed')
                         : t('arena.tapVote')}
                   </span>
-                  {canManage || poll.created_by === user.id ? (
+                  {poll.kind === 'general' && (canManage || poll.created_by === user.id) ? (
                     <button
                       onClick={() => run(() => backend.deletePoll(poll.id), 'Poll removed')}
                       className="-my-2 inline-flex min-h-11 items-center gap-1 px-1 font-bold text-ink-400 hover:text-rose-500"

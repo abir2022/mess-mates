@@ -6,17 +6,20 @@ import {
   ChevronRight,
   CircleCheck,
   Clock,
+  Copy,
   Lock,
   Paperclip,
   Plus,
   Trash2,
   UtensilsCrossed,
   Wallet,
+  X,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { Avatar, Button, EmptyState, Pill, SectionHeading, Stepper, Tabs } from '../components/ui'
 import { depositMethods } from '../lib/backend'
 import { isMealLocked, mealTotal } from '../lib/calc'
+import { myDepositRequests, pendingDepositRequests } from '../lib/governance'
 import { useI18n, type MessageKey } from '../lib/i18n'
 import { addDays, money, shortDate, todayISO, weekdayShort } from '../lib/format'
 import type { DepositMethod, MealField } from '../lib/types'
@@ -55,6 +58,46 @@ export function MealsBazar() {
   const updateMeal = (userId: string, field: MealField, value: number) => {
     if (locked) return
     run(() => backend.setMeal({ userId, date, field, value }))
+  }
+
+  // Copying the previous day is the fastest way to start a new one: it only
+  // fills mates who have nothing logged for the selected day, so an existing
+  // edit is never overwritten.
+  const previousDate = addDays(date, -1)
+  const activeIds = new Set(activeMembers.map((member) => member.user_id))
+  const previousRows = cycleMeals.filter(
+    (meal) => meal.date === previousDate && activeIds.has(meal.user_id),
+  )
+  const filledDates = new Set(
+    cycleMeals.filter((meal) => meal.date === date).map((meal) => meal.user_id),
+  )
+  const copyableRows = previousRows.filter((meal) => !filledDates.has(meal.user_id))
+
+  const weekStart = addDays(date, -new Date(`${date}T12:00:00`).getDay())
+  const week = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
+  const weekTotals = new Map<string, number>()
+  for (const meal of cycleMeals) {
+    if (week.includes(meal.date)) {
+      weekTotals.set(meal.date, (weekTotals.get(meal.date) ?? 0) + mealTotal(meal))
+    }
+  }
+
+  const copyPreviousDay = () => {
+    if (locked || copyableRows.length === 0) return
+    void run(
+      () =>
+        backend.setDayMeals(
+          copyableRows.map((meal) => ({
+            userId: meal.user_id,
+            date,
+            breakfast: Number(meal.breakfast),
+            lunch: Number(meal.lunch),
+            dinner: Number(meal.dinner),
+            guest_meals: Number(meal.guest_meals),
+          })),
+        ),
+      t('meals.copiedFrom', { date: shortDate(previousDate), count: copyableRows.length }),
+    )
   }
 
   return (
@@ -110,6 +153,16 @@ export function MealsBazar() {
               <Button size="sm" variant="ghost" onClick={() => setDate(todayISO())}>
                 {t('meals.today')}
               </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={locked || copyableRows.length === 0 || busy}
+                onClick={copyPreviousDay}
+                title={t('meals.copyPrevHint', { date: shortDate(previousDate) })}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {t('meals.copyPrev')}
+              </Button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -125,6 +178,38 @@ export function MealsBazar() {
                 {weekdayShort(date)} ·{' '}
                 <span className="font-extrabold text-ink-800">{t('meals.count', { count: dayTotal.toFixed(1) })}</span>
               </span>
+            </div>
+          </div>
+
+          <div className="card p-2">
+            <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-400">
+              {t('meals.week')}
+            </p>
+            <div className="grid grid-cols-7 gap-1">
+              {week.map((day) => {
+                const total = weekTotals.get(day) ?? 0
+                const selected = day === date
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setDate(day)}
+                    aria-pressed={selected}
+                    className={`flex min-h-11 flex-col items-center justify-center rounded-lg px-0.5 py-1 transition ${
+                      selected
+                        ? 'bg-brand-600 text-white'
+                        : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">
+                      {weekdayShort(day).slice(0, 2)}
+                    </span>
+                    <span className="text-xs font-extrabold tabular-nums">
+                      {total ? total.toFixed(1).replace(/\.0$/, '') : '—'}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -452,11 +537,18 @@ function DepositsTab() {
   const canManage = myRole === 'admin' || myRole === 'manager'
   const locked = cycle.status === 'closed'
   const members = ws.members.filter((member) => member.status === 'active')
-  const nameOf = (id: string) => members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  // Past deposits still belong to members who have left, so look them up in the
+  // whole roster: a settled month must never show "Member" instead of a name.
+  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
   const entries = ws.deposits
     .filter((entry) => entry.cycle_id === cycle.id)
     .sort((a, b) => b.paid_date.localeCompare(a.paid_date))
   const total = entries.reduce((sum, entry) => sum + Number(entry.amount), 0)
+  const waitingApproval = pendingDepositRequests(ws.depositRequests, cycle.id)
+  const myWaiting = myDepositRequests(ws.depositRequests, cycle.id, user.id).filter(
+    (request) => request.status === 'pending',
+  )
+  const approvalRows = canManage ? waitingApproval : myWaiting
 
   const add = async () => {
     const value = Number(amount)
@@ -469,16 +561,29 @@ function DepositsTab() {
     }
     const ok = await run(async () => {
       const proofPath = file ? await backend.uploadDepositProof(file) : null
-      await backend.addDeposit({
-        userId,
-        amount: value,
-        date,
-        note: note.trim(),
-        method,
-        reference: reference.trim(),
-        proofPath,
-      })
-    }, 'Deposit recorded')
+      if (canManage) {
+        await backend.addDeposit({
+          userId,
+          amount: value,
+          date,
+          note: note.trim(),
+          method,
+          reference: reference.trim(),
+          proofPath,
+        })
+      } else {
+        // A member's payment goes to the manager as a request; it only becomes
+        // a deposit once the manager approves it.
+        await backend.requestDeposit({
+          amount: value,
+          date,
+          note: note.trim(),
+          method,
+          reference: reference.trim(),
+          proofPath,
+        })
+      }
+    }, canManage ? 'Deposit recorded' : t('meals.depositRequested'))
     if (ok) {
       setAmount('')
       setReference('')
@@ -587,10 +692,79 @@ function DepositsTab() {
             loading={busy}
             onClick={add}
           >
-            <Plus className="h-4 w-4" /> {t('meals.addDeposit')}
+            <Plus className="h-4 w-4" /> {canManage ? t('meals.addDeposit') : t('meals.requestPayment')}
           </Button>
+          {!canManage ? (
+            <p className="text-[10px] leading-relaxed text-ink-400">{t('meals.requestPaymentHint')}</p>
+          ) : null}
         </div>
       </div>
+
+      <div className="space-y-3">
+        {approvalRows.length ? (
+          <div className="card overflow-hidden">
+            <div className="border-b border-ink-100 bg-amber-50/60 px-4 py-3">
+              <p className="text-sm font-extrabold text-ink-900">
+                {canManage ? t('meals.pendingApprovals') : t('meals.myPendingPayments')}
+              </p>
+            </div>
+            <div className="divide-y divide-ink-100">
+              {approvalRows.map((request) => (
+                <div key={request.id} className="flex flex-wrap items-center justify-between gap-2 p-3.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-ink-900">
+                      {nameOf(request.user_id)} · {money(Number(request.amount), symbol)}
+                    </p>
+                    <p className="text-[11px] text-ink-500">
+                      {shortDate(request.paid_date)} ·{' '}
+                      {depositMethods.find((item) => item.id === request.method)?.label ?? 'Cash'}
+                      {request.reference ? ` · ${request.reference}` : ''}
+                      {request.note ? ` · ${request.note}` : ''}
+                    </p>
+                    {request.proof_path ? (
+                      <button
+                        onClick={() => openProof(request.proof_path as string)}
+                        className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 hover:bg-brand-100"
+                      >
+                        <Paperclip className="h-3 w-3" /> {t('meals.receipt')}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {canManage ? (
+                      <>
+                        <Button
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => run(() => backend.decideDepositRequest(request.id, true), t('meals.paymentApproved'))}
+                        >
+                          <Check className="h-3.5 w-3.5" /> {t('meals.approvePayment')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => run(() => backend.decideDepositRequest(request.id, false), t('meals.paymentDeclined'))}
+                        >
+                          <X className="h-3.5 w-3.5" /> {t('meals.declinePayment')}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => run(() => backend.cancelDepositRequest(request.id), t('meals.cancelPayment'))}
+                      >
+                        {t('meals.cancelPayment')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
       <div className="card divide-y divide-ink-100">
         {entries.length === 0 ? (
@@ -631,6 +805,7 @@ function DepositsTab() {
             </div>
           ))
         )}
+      </div>
       </div>
     </div>
   )

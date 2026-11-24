@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { BadgeCheck, Crown, Megaphone, Play, ShieldCheck, Sparkles, X } from 'lucide-react'
+import { BadgeCheck, Crown, MessageCircle, Megaphone, Play, ShieldCheck, Sparkles, X } from 'lucide-react'
 import { useApp } from '../context/AppContext'
+import { billingConfig, whatsappLink } from '../lib/billing'
 import { useI18n } from '../lib/i18n'
 import { Button, Modal, Pill } from './ui'
 
@@ -114,7 +115,7 @@ export function MonetizationProvider({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <Crown className="h-5 w-5 text-amber-300" />
               <span className="text-sm font-extrabold">{t('pro.plan')}</span>
-              <Pill tone="gold">{t('pro.price')}</Pill>
+              <Pill tone="gold">{billingConfig.price}</Pill>
             </div>
             <p className="mt-2 text-xs text-brand-50/80">{t('pro.lead')}</p>
           </div>
@@ -134,9 +135,22 @@ export function MonetizationProvider({ children }: { children: ReactNode }) {
             ))}
           </ul>
 
-          {/* Pro is not sold in the app: no payment provider is wired up yet, and the
+          {/* Pro is not sold in the app: there is no payment gateway yet, and the
               entitlement is server-only (see supabase/migrations/006). The button
-              starts a conversation instead of flipping the flag. */}
+              starts the WhatsApp conversation that activates the mess. Hidden
+              gateway settings live in src/lib/billing.ts and render nothing
+              until `gateways.enabled` is switched on. */}
+          <div className="rounded-xl border border-ink-100 bg-ink-50/70 px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">
+              {t('pro.contactLabel')}
+            </p>
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm font-extrabold text-ink-900">
+              <MessageCircle className="h-4 w-4 text-emerald-600" />
+              {billingConfig.contact.display}
+            </p>
+            <p className="mt-0.5 text-[10px] text-ink-400">{t('pro.contactNumberHint')}</p>
+          </div>
+
           <Button
             variant="gold"
             className="w-full"
@@ -144,8 +158,10 @@ export function MonetizationProvider({ children }: { children: ReactNode }) {
               const message = t('pro.waMessage', {
                 mess: ws?.mess.name ?? '',
                 code: ws?.mess.invite_code ?? '',
+                price: billingConfig.price,
+                phone: billingConfig.contact.display,
               })
-              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener')
+              window.open(whatsappLink(message), '_blank', 'noopener')
               setUpgradeOpen(false)
             }}
           >

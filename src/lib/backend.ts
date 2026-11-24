@@ -1,11 +1,13 @@
 import type {
   BazarExpense,
+  ClientError,
   DepositMethod,
   DutyStatus,
   FixedUtility,
   GameRoom,
   GameType,
   MealField,
+  MemberRequestKind,
   Poll,
   Profile,
   Role,
@@ -58,6 +60,26 @@ export interface MealInput {
   value: number
 }
 
+/** A member's four meal counts for one day, saved as a single row. */
+export interface DayMealInput {
+  userId: string
+  date: string
+  breakfast: number
+  lunch: number
+  dinner: number
+  guest_meals: number
+}
+
+/** A payment a member says they made; the manager still has to approve it. */
+export interface DepositRequestInput {
+  amount: number
+  date: string
+  note: string
+  method?: DepositMethod
+  reference?: string
+  proofPath?: string | null
+}
+
 export interface GamePatch {
   state?: Record<string, unknown>
   status?: GameRoom['status']
@@ -84,11 +106,42 @@ export interface Backend {
   updateMess(patch: Partial<{ name: string; currency_symbol: string; guild_banner: string; guild_emblem: string; meal_lock_hour: number }>): Promise<void>
   /** Admin only: promote, demote or keep a mate as a plain member. */
   updateMemberRole(memberId: string, role: Role): Promise<void>
-  /** Marks the membership as left; their history stays for past settlements. */
+  /**
+   * Admin removal now needs a poll result, so this only ever refuses until the
+   * mess has voted (see `createGovernancePoll` and `applyPollResult`).
+   */
   removeMember(memberId: string): Promise<void>
-  /** Removes your own active membership so you land back on create/join. */
+  /** Legacy call; the request flow below replaces it. */
   leaveMess(): Promise<void>
+  /** Asks the mess admin to approve leaving, or deleting the account. */
+  requestLeave(kind: MemberRequestKind, note?: string): Promise<void>
+  withdrawMemberRequest(id: string): Promise<void>
+  decideMemberRequest(id: string, approve: boolean, note?: string): Promise<void>
+  /** Leaves while the request is still unanswered; the mess keeps the records. */
+  leaveMessAnyway(): Promise<void>
+  /** Admin-only: opens a removal poll or a manager election. */
+  createGovernancePoll(
+    kind: 'member_removal' | 'manager_selection',
+    targetUserId: string | null,
+    candidateIds: string[],
+    closesAt: string,
+  ): Promise<void>
+  /** Admin-only, after the poll closes with quorum: applies the outcome. */
+  applyPollResult(pollId: string): Promise<string>
+  /** Member side of the money flow: send a payment to the manager. */
+  requestDeposit(input: DepositRequestInput): Promise<void>
+  decideDepositRequest(id: string, approve: boolean): Promise<void>
+  cancelDepositRequest(id: string): Promise<void>
+  /** Allowed once no mess is active; anonymises the profile. */
+  deleteAccount(): Promise<void>
+  /** Admin-only diagnostics from the vendor-free error table. */
+  loadClientErrors(): Promise<ClientError[]>
   setMeal(input: MealInput): Promise<void>
+  /**
+   * Writes a whole day at once. Used by "copy previous day" so a five-member
+   * mess costs one round trip instead of twenty.
+   */
+  setDayMeals(rows: DayMealInput[]): Promise<void>
   addBazar(input: BazarInput): Promise<void>
   setBazarStatus(id: string, status: BazarExpense['status']): Promise<void>
   deleteBazar(id: string): Promise<void>
@@ -217,6 +270,11 @@ function createOfflineBackend(inner: Backend): Backend {
       await queued({ kind: 'setMeal', input }, () => inner.setMeal(input))
     },
 
+    async setDayMeals(rows) {
+      if (!rows.length) return
+      await queued({ kind: 'setDayMeals', rows }, () => inner.setDayMeals(rows))
+    },
+
     async addBazar(input) {
       await queued({ kind: 'addBazar', input }, () => inner.addBazar(input))
     },
@@ -290,6 +348,8 @@ function createOfflineBackend(inner: Backend): Backend {
     switch (op.kind) {
       case 'setMeal':
         return inner.setMeal(op.input)
+      case 'setDayMeals':
+        return inner.setDayMeals(op.rows)
       case 'addBazar':
         return inner.addBazar(op.input)
       case 'setBazarStatus':

@@ -1,5 +1,6 @@
 import type {
   BazarInput,
+  DayMealInput,
   DepositInput,
   DutyInput,
   MealInput,
@@ -47,6 +48,7 @@ export type DutyPatch = Partial<{
 
 export type OutboxOp =
   | { kind: 'setMeal'; input: MealInput }
+  | { kind: 'setDayMeals'; rows: DayMealInput[] }
   | { kind: 'addBazar'; input: BazarInput }
   | { kind: 'setBazarStatus'; id: string; status: BazarExpense['status'] }
   | { kind: 'deleteBazar'; id: string }
@@ -139,6 +141,38 @@ export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
         [op.input.field]: value,
       }
       return { ...ws, meals: [...ws.meals, meal] }
+    }
+
+    case 'setDayMeals': {
+      if (!cycleId) return ws
+      let next = ws.meals
+      for (const row of op.rows) {
+        const values = {
+          breakfast: normalizeMealValue(row.breakfast),
+          lunch: normalizeMealValue(row.lunch),
+          dinner: normalizeMealValue(row.dinner),
+          guest_meals: normalizeMealValue(row.guest_meals),
+        }
+        const index = next.findIndex(
+          (meal) =>
+            meal.cycle_id === cycleId && meal.user_id === row.userId && meal.date === row.date,
+        )
+        if (index >= 0) {
+          next = next.map((meal, i) => (i === index ? { ...meal, ...values } : meal))
+        } else {
+          next = [
+            ...next,
+            {
+              id: `local-${newId()}`,
+              cycle_id: cycleId,
+              user_id: row.userId,
+              date: row.date,
+              ...values,
+            },
+          ]
+        }
+      }
+      return { ...ws, meals: next }
     }
 
     case 'addBazar': {
@@ -240,6 +274,11 @@ export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
         closes_at: op.input.closesAt,
         created_by: ws.profile.id,
         created_at: now,
+        kind: 'general',
+        target_user_id: null,
+        candidate_ids: [],
+        quorum: 0.8,
+        result_applied: false,
       }
       return { ...ws, polls: [row, ...ws.polls] }
     }

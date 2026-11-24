@@ -546,6 +546,7 @@ There is **no ESLint/Prettier config, no CI workflow, no E2E/browser test suite,
 | `tests/export.test.ts` | JSON backup envelope, CSV quoting/BOM/rows, filename slugs |
 | `tests/i18n.test.ts` | interpolation, missing placeholders, every key present in Bangla, sample translations differ |
 | `tests/reminders.test.ts` | dues/duty/meals/poll/approval rules, tones/links, outstanding dues ordering, WhatsApp text |
+| `tests/closeOut.test.ts` | close-out warnings (pending bazar, empty month, no deposits), informational dues/credit, transfer count |
 
 Not covered: React components, Supabase RLS/RPCs, auth flows, PWA/service worker, PDF layout, print CSS. Those are verified manually (or not at all — see §16).
 
@@ -924,14 +925,109 @@ support — a mess switcher is still the real fix.
 | Item | Blocked on |
 |---|---|
 | Verify `005`/`006` against a real Supabase project | Needs a Supabase account/project or a live session — cannot be created from here. |
-| Billing provider (bKash/SSLCommerz or Stripe) | Provider account + keys + a webhook endpoint. The client hole is already closed (§22), so this is additive. |
+| Billing provider (bKash/SSLCommerz or Stripe) | Price and the WhatsApp contact are live (§26.3); only the checkout needs a provider account + keys + a webhook endpoint. The client hole is already closed (§22), so this is additive. |
 | Web Push reminders | Needs VAPID keys and a scheduled Edge Function deploy. |
 | Per-member payment slips, cycle close-out assistant | Not started; the transfer plan covers the main "who pays whom" need first. |
-| Error reporting / analytics | Needs a provider account and DSN. |
+| Error reporting / analytics | Vendor-free crash log is live (§26.4). Product analytics still needs a provider. |
 | pgTAP suite, isolated staging project | Needs a local/CI Postgres and a second Supabase project. |
 
-**Verified for this pass:** typecheck pass; `bun test` 42 pass / 0 fail across 6 files; build pass with
-the chunk table above; Settlement transfer card and the Bangla copy checked in the browser at 360 px
-(no horizontal overflow, `Nayeem Chowdhury → Rakib Hasan ৳1,838.56` rendered from the live demo data).
-The first-run checklist was exercised through its unit tests, not visually, because the seeded demo
-mess already has every step complete.
+**Verified for this pass:** typecheck pass; `bun test` 42 pass / 0 fail across 6 files; build pass with the chunk table above; Settlement transfer card and the Bangla copy checked in the browser at 360 px (no horizontal overflow, `Nayeem Chowdhury → Rakib Hasan ৳1,838.56` rendered from the live demo data). The first-run checklist was exercised through its unit tests, not visually, because the seeded demo mess already has every step complete.
+
+---
+
+## 25. Daily-flow pass: batch meals, close-out review, focus trap (24 Nov 2026)
+
+### 25.1 Copy previous day and the week strip
+
+Logging meals was the most repeated task in the app: every member, every day, four steppers each, one write per tap. The Meal tab now has two additions:
+
+1. **Copy previous day** builds one row per active member from the day before and saves them in a single call. It only fills members who have **nothing** logged on the selected day, so an existing edit is never overwritten; the button disables when the day is locked or there is nothing left to copy. The toast names the source date and how many mates were filled.
+2. **Week at a glance** under the date toolbar shows Sunday→Saturday totals for the selected week; tapping a day selects it. It uses the same cycle data, so days outside the cycle simply show no total.
+
+New backend method `setDayMeals(rows: DayMealInput[])`:
+
+- **Live** — one `upsert` on `daily_meals` with `onConflict: 'cycle_id,user_id,date'`. The meal-lock trigger still evaluates every row, so a member cannot use it to rewrite a locked day.
+- **Demo** — the same merge into the local state.
+- **Offline** — queued as the `setDayMeals` outbox operation and applied optimistically like `setMeal`.
+
+Why a batch method rather than a client loop: five members × four fields is twenty round trips, which reads as a frozen button on a phone. This is one request.
+
+### 25.2 Close-out review
+
+Closing a month is final — the DB blocks every meal, bazar, utility and deposit write afterwards — but it used to be a one-line “Close” button with no checks. Managers now press **Review & close** on any open cycle, which opens a sheet with:
+
+- a four-figure summary (meal rate, total meals, approved bazar, deposits collected)
+- warnings that should be fixed first: pending bazar that would be excluded, a month with no meals, no deposits
+- informational lines: missing utilities, members who still owe (carried forward), members in credit, and the number of payments the settle-up plan needs
+- the lock note, then **Close month**
+
+`src/lib/closeOut.ts → closeOutReview(ws, cycle, settlement)` is pure and covered by six tests in `tests/closeOut.test.ts`. Warnings mark the review as not ready; dues and credit do not, because carrying a balance is normal at month end.
+
+### 25.3 Modal focus trap
+
+`Modal` now moves focus into the sheet when it opens, keeps Tab/Shift+Tab inside it, and returns focus to the trigger on close. Escape and the body scroll lock are unchanged, but the effect now runs only when `open` changes (the close callback is held in a ref), so re-renders no longer re-run the body-lock work.
+
+### 25.4 Verified for this pass
+
+- `npm run typecheck` — pass.
+- `bun test` — **48 pass / 0 fail across 7 files** (136 expects). New file: `tests/closeOut.test.ts`.
+- `npm run build` — pass. Entry `index` grew from 138.8 kB to **143.6 kB (44.7 kB gzip)** for the new UI and close-out logic; the vendor and lazy chunks are unchanged, so the previous chunk warning does not return.
+
+**Checked in the demo build at 360 px** (Chromium, `VITE_SUPABASE_URL= VITE_SUPABASE_PUBLISHABLE_KEY= npx vite --port 5274`): the week strip renders Sunday→Saturday totals and selects a day; **Copy previous day** filled 2026-11-25 from the 24th (5 mates, 14 meals) in one call, updated the week strip and showed the toast; the close-out sheet for November opened with the four summary figures, the pending-bazar warning, dues/credit and transfer count, focus landed inside the dialog, and the document did not scroll sideways. The dialog closed on Escape and returned focus to the page.
+
+**Not verified:** no live Supabase session was available, so the batch `upsert` and its RLS/trigger behaviour have only been exercised against the demo backend, and nothing has been checked on a physical phone.
+
+---
+
+## 26. Governance, payment requests, manual billing and a vendor-free error log (24 Nov 2026)
+
+This pass implements the mess's own rules instead of leaving them to whoever remembers them. Everything is enforced in Postgres (`007_governance.sql`), mirrored in the demo backend, and the screens only offer the actions the rules allow.
+
+### 26.1 Leaving, deletion and removal
+
+| Situation | Rule now | Where |
+|---|---|---|
+| A member wants to leave | They send a **leave request**. An admin approves (membership becomes `left`) or rejects it. | Mess Hub → Council, `create_member_request` / `decide_member_request` |
+| The admin never decides | The member may **leave without waiting**. The request becomes `auto_left`; the membership becomes `left`; nothing is deleted. | `leave_mess_override()` |
+| The member changes their mind | They can withdraw the request while it is pending. | `withdraw_member_request()` |
+| A member wants to delete their account | They request deletion, admin approves the leave, and only then can they delete it. Their profile is **anonymised** (`full_name = 'Former member'`, email/photo cleared, `deleted_at` set), never hard-deleted, because meals, bazar and deposits still point at it. | `delete_my_account()`; the button lives on the onboarding screen, which is what they see once they have left |
+| An admin wants to remove someone | They must open a **removal poll**. 80% of active members must vote. Majority for removal → member removed **and banned** from rejoining. Majority against → the admin may still remove them, but they **can rejoin** with the invite code. A tie decides nothing. | `create_governance_poll('member_removal')`, `apply_poll_result()` |
+| `leave_mess()` / `remove_mess_member()` are called directly | Both now raise a clear error pointing at the request/poll flow, so old code cannot bypass the rules. | same migration |
+
+The member's complete accounting can be exported at any point from the request row or the removal poll (`downloadMemberStatement` → one CSV with per-cycle settlement, every meal, every bazar entry and every deposit). That is the "admin can export it and send it or download it" part of the rule; nothing has to be exported *before* the member leaves for the records to stay correct.
+
+### 26.2 The manager and the money
+
+- The manager is **elected by the same 80% quorum** (`create_governance_poll('manager_selection')`). Candidates default to every active member; the admin can deselect. Applying the result (`apply_poll_result`) closes the previous `manager_terms` row, gives the winner the `manager` role, demotes other managers, and opens a new term. Hub → Council shows who the manager is and since when.
+- A member's payment is a **request**: Meals & Bazar → Deposits now says *Send to manager* for non-managers. It creates a `deposit_requests` row and does **not** affect the meal rate or balances. The manager sees *Payments waiting for the manager* and approves or declines; only approval inserts the real `member_deposits` row. Managers and admins keep the direct "record a deposit" form for cash they collected themselves.
+- Requests can be cancelled by the member while pending; closed cycles reject them.
+
+### 26.3 Billing: price shown, activation by WhatsApp
+
+There is still no payment gateway, so Pro is sold as follows:
+
+- The upgrade sheet shows **৳199 / month** and the contact number **01797989412 (WhatsApp)**. The button opens `wa.me/8801797989412` with a prefilled message that includes the mess name, invite code and price.
+- Gateway settings exist but are **hidden and disabled** in `src/lib/billing.ts` (`gateways.enabled: false`, plus empty `bkash` and `stripe` blocks). Nothing renders them. When a gateway is available: fill the block, flip the flag, and add the checkout branch to the upgrade sheet. The entitlement is already server-only (`006`), so no client change can grant Pro.
+
+### 26.4 Vendor-free error reporting
+
+`client_errors` is a plain table in the project's own database. `src/lib/telemetry.ts` installs `window.onerror` and `unhandledrejection` handlers (`main.tsx`) and `ErrorBoundary` reports React crashes. It stores message, stack, route, user agent, app version, user id and mess id — no form values or tokens — with at most five reports per session and one per unique message. Admins get **Settings → App errors → Load recent errors**, reading the last 20 rows for their mess. Reporting is best-effort and silently no-ops without Supabase credentials.
+
+### 26.5 Security changes worth knowing
+
+- `mess_members` no longer has direct client `insert`/`update`/`delete` policies. Every membership change goes through a `SECURITY DEFINER` function, otherwise an admin (or a banned member) could sidestep the poll and request rules with a hand-written API call.
+- Direct poll inserts are limited to `kind = 'general'`; governance polls are created by the RPC. Governance polls cannot be deleted before their result is applied.
+- New tables are read-only to clients: `member_requests`, `mess_bans`, `manager_terms`, `deposit_requests`. Writes happen only inside those functions.
+- `007` adds the new tables to the Realtime publication (same pattern as `005`).
+
+### 26.6 Setup and verification
+
+**Required once, in the Supabase SQL editor:** run `supabase/migrations/007_governance.sql` after `001`–`006`. The app degrades rather than crashing on a project without it (the extra queries are ignored and governance writes fail with the DB's message), but none of §26.1–26.2 works until it is applied.
+
+- `npm run typecheck` — pass.
+- `bun test` — **67 pass / 0 fail across 8 files** (166 expects). New file `tests/governance.test.ts` covers quorum maths, majority/ban/tie verdicts, election winners, request helpers and manager terms.
+- `npm run build` — pass; the Hub chunk grows to 43.2 kB (10.9 kB gzip) for the Council tab.
+
+**Checked in the demo build at 360 px:** the Council tab shows the elected manager with their term start, the pending leave request, the 80%-quorum reminder and the per-member removal buttons; approving the request marked the member `left`, removed them from the removal list and kept the request in history with an export button; a removal poll was created for Rakib and rendered "0/4 voted · 4 needed" with both options and an export link; the deposit tab showed Tanvir's ৳2,000 payment as *waiting for the manager*, and approving it added the deposit (৳25,000 → ৳27,000) and cleared the card.
+
+**Not verified here:** no live Supabase session was available, so the `007` functions, RLS changes and Realtime additions have only been exercised against the demo backend — they must be tried with two real accounts after the migration (see the checklist in the handoff message). The owner ran `005` and `006` on 24 Nov 2026; I could not independently confirm the publication/trigger state from this machine.

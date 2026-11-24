@@ -1,18 +1,25 @@
 import { useState } from 'react'
 import {
+  AlertTriangle,
   CalendarDays,
   Check,
+  CheckCircle2,
   Clock,
   Crown,
+  Info,
+  Lock,
   Download,
   Megaphone,
   MessageSquare,
   Plus,
   Send,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   ShoppingBasket,
   Trash2,
+  UserMinus,
+  Vote,
   X,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
@@ -20,11 +27,24 @@ import { useMonetization } from '../components/Monetization'
 import { Avatar, Button, CopyButton, EmptyState, Modal, Pill, SectionHeading, ShareButton, Tabs } from '../components/ui'
 import { resetDemoData } from '../lib/demo'
 import { useI18n } from '../lib/i18n'
-import { addDays, monthOptions, monthTitle, relativeDay, shortDate, timeAgo, todayISO } from '../lib/format'
-import { downloadSettlementCsv, downloadWorkspace } from '../lib/export'
+import { addDays, money, monthOptions, monthTitle, relativeDay, shortDate, timeAgo, todayISO } from '../lib/format'
+import { computeSettlement } from '../lib/calc'
+import { closeOutReview, type CloseOutIssue } from '../lib/closeOut'
+import {
+  canLeaveWithoutWaiting,
+  currentManagerTerm,
+  managerWinner,
+  openGovernancePolls,
+  openRequestFor,
+  pendingRequests,
+  pollProgress,
+  removalVerdict,
+} from '../lib/governance'
+import type { ClientError, MonthlyCycle } from '../lib/types'
+import { downloadMemberStatement, downloadSettlementCsv, downloadWorkspace } from '../lib/export'
 import type { BazarDuty, MessMember, Role } from '../lib/types'
 
-type HubTab = 'board' | 'roster' | 'settings'
+type HubTab = 'board' | 'roster' | 'council' | 'settings'
 
 export function Hub() {
   const [tab, setTab] = useState<HubTab>('board')
@@ -43,12 +63,14 @@ export function Hub() {
         tabs={[
           { id: 'board', label: t('hub.tabBoard'), icon: <MessageSquare className="h-3.5 w-3.5" /> },
           { id: 'roster', label: t('hub.tabRoster'), icon: <ShoppingBasket className="h-3.5 w-3.5" /> },
+          { id: 'council', label: t('gov.tab'), icon: <Vote className="h-3.5 w-3.5" /> },
           { id: 'settings', label: t('hub.tabSettings'), icon: <Settings2 className="h-3.5 w-3.5" /> },
         ]}
       />
 
       {tab === 'board' ? <BoardTab /> : null}
       {tab === 'roster' ? <RosterTab /> : null}
+      {tab === 'council' ? <CouncilTab /> : null}
       {tab === 'settings' ? <SettingsTab /> : null}
     </div>
   )
@@ -425,6 +447,439 @@ function RosterTab() {
   )
 }
 
+function CouncilTab() {
+  const { ws, user, backend, run, busy } = useApp()
+  const { t } = useI18n()
+  const [electionOpen, setElectionOpen] = useState(false)
+  const [candidates, setCandidates] = useState<string[]>([])
+  const [electionDays, setElectionDays] = useState('2')
+  const [removalFor, setRemovalFor] = useState<MessMember | null>(null)
+  const [removalDays, setRemovalDays] = useState('2')
+
+  if (!ws || !user) return null
+
+  const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
+  const isAdmin = myRole === 'admin'
+  const active = ws.members.filter((member) => member.status === 'active')
+  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const activeCount = active.length
+  const term = currentManagerTerm(ws.managerTerms, todayISO())
+  const manager = term ? ws.members.find((member) => member.user_id === term.user_id) : null
+  const myRequest = openRequestFor(ws.requests, user.id)
+  const inbox = pendingRequests(ws.requests)
+  const handled = ws.requests.filter((request) => request.status !== 'pending').slice(0, 6)
+  // Open votes first, then the last few applied ones so the outcome stays
+  // visible instead of the card disappearing the moment it is applied.
+  const openPolls = [
+    ...openGovernancePolls(ws.polls, 'member_removal'),
+    ...openGovernancePolls(ws.polls, 'manager_selection'),
+  ].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  const appliedPolls = ws.polls
+    .filter((poll) => poll.kind !== 'general' && poll.result_applied)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 3)
+  const polls = [...openPolls, ...appliedPolls]
+
+  const isClosed = (closesAt: string) => new Date(closesAt).getTime() <= Date.now()
+
+  const startElection = async () => {
+    const closesAt = new Date(Date.now() + Math.max(1, Number(electionDays)) * 86400_000).toISOString()
+    const ok = await run(
+      () => backend.createGovernancePoll('manager_selection', null, candidates, closesAt),
+      'Manager election opened',
+    )
+    if (ok) setElectionOpen(false)
+  }
+
+  const startRemoval = async () => {
+    if (!removalFor) return
+    const closesAt = new Date(Date.now() + Math.max(1, Number(removalDays)) * 86400_000).toISOString()
+    const ok = await run(
+      () => backend.createGovernancePoll('member_removal', removalFor.user_id, [], closesAt),
+      'Removal poll opened',
+    )
+    if (ok) setRemovalFor(null)
+  }
+
+  return (
+    <div className="space-y-4">
+      {!isAdmin ? (
+        <p className="rounded-xl bg-brand-50 px-3 py-2.5 text-[11px] font-medium leading-relaxed text-brand-800">
+          {t('gov.managerMoney')}
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card p-4">
+          <SectionHeading
+            title={t('gov.manager')}
+            hint={t('gov.managerHint')}
+            action={
+              isAdmin ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setCandidates(active.map((member) => member.user_id))
+                    setElectionOpen(true)
+                  }}
+                >
+                  <Vote className="h-3.5 w-3.5" /> {t('gov.startElection')}
+                </Button>
+              ) : undefined
+            }
+          />
+          {manager ? (
+            <div className="flex items-center gap-3 rounded-xl bg-ink-50 px-3 py-2.5">
+              <Avatar
+                name={manager.profile.full_name}
+                url={manager.profile.avatar_url}
+                frame={manager.profile.avatar_frame}
+                size="sm"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-extrabold text-ink-900">{manager.profile.full_name}</p>
+                <p className="text-[10px] text-ink-500">
+                  {term ? t('gov.managerSince', { date: shortDate(term.starts_on) }) : t('gov.managerVoted')}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-xl bg-ink-50 px-3 py-2.5 text-[11px] text-ink-500">{t('gov.managerNone')}</p>
+          )}
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-500">{t('gov.managerMoney')}</p>
+        </div>
+
+        <div className="card p-4">
+          <SectionHeading title={t('gov.requests')} hint={t('gov.requestsHint')} />
+          {myRequest ? (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
+              <p className="text-[11px] font-bold text-amber-900">
+                {t('gov.yourRequest', {
+                  kind: myRequest.kind === 'delete' ? t('gov.kindDelete') : t('gov.kindLeave'),
+                })}
+              </p>
+              {myRequest.note ? <p className="mt-1 text-[11px] text-amber-800">{myRequest.note}</p> : null}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {canLeaveWithoutWaiting(myRequest) ? (
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => run(() => backend.leaveMessAnyway(), 'You left the mess')}
+                  >
+                    {t('gov.leaveAnyway')}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => run(() => backend.withdrawMemberRequest(myRequest.id), 'Request withdrawn')}
+                >
+                  {t('gov.withdraw')}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {isAdmin ? (
+            <div className="space-y-2">
+              {inbox.length === 0 ? (
+                <p className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] text-ink-500">{t('gov.noRequests')}</p>
+              ) : (
+                inbox.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-ink-100 p-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-ink-900">
+                          {nameOf(request.user_id)} ·{' '}
+                          {request.kind === 'delete' ? t('gov.kindDelete') : t('gov.kindLeave')}
+                        </p>
+                        <p className="text-[10px] text-ink-400">
+                          {t('gov.requestedBy', { when: timeAgo(request.created_at) })}
+                        </p>
+                        {request.note ? (
+                          <p className="mt-1 text-[11px] leading-relaxed text-ink-600">{request.note}</p>
+                        ) : null}
+                      </div>
+                      <button
+                        onClick={() => downloadMemberStatement(ws, request.user_id)}
+                        title={t('gov.exportStatement')}
+                        className="shrink-0 rounded-md p-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-700"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() =>
+                          run(() => backend.decideMemberRequest(request.id, true), `Request approved`)
+                        }
+                      >
+                        <Check className="h-3.5 w-3.5" /> {t('gov.approve')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          run(() => backend.decideMemberRequest(request.id, false), 'Request rejected')
+                        }
+                      >
+                        <X className="h-3.5 w-3.5" /> {t('gov.reject')}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+
+          {handled.length ? (
+            <div className="mt-3 space-y-1.5">
+              {handled.map((request) => (
+                <div key={request.id} className="flex items-center justify-between gap-2 text-[10px] text-ink-500">
+                  <span className="truncate">
+                    {nameOf(request.user_id)} · {request.kind === 'delete' ? t('gov.kindDelete') : t('gov.kindLeave')}
+                  </span>
+                  <Pill tone={request.status === 'rejected' ? 'danger' : 'neutral'}>{request.status}</Pill>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {isAdmin ? (
+        <div className="card p-4">
+          <SectionHeading title={t('gov.removal')} hint={t('gov.removalHint')} />
+          <div className="grid gap-2 sm:grid-cols-2">
+            {active
+              .filter((member) => member.user_id !== user.id)
+              .map((member) => (
+                <div key={member.id} className="flex items-center gap-2 rounded-xl border border-ink-100 px-2.5 py-2">
+                  <Avatar
+                    name={member.profile.full_name}
+                    url={member.profile.avatar_url}
+                    frame={member.profile.avatar_frame}
+                    size="xs"
+                  />
+                  <p className="min-w-0 flex-1 truncate text-xs font-bold text-ink-800">{member.profile.full_name}</p>
+                  <Button size="sm" variant="danger" onClick={() => setRemovalFor(member)}>
+                    <UserMinus className="h-3.5 w-3.5" /> {t('gov.startRemoval')}
+                  </Button>
+                </div>
+              ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div>
+        <SectionHeading title={t('gov.polls')} />
+        {polls.length === 0 ? (
+          <div className="card p-6">
+            <EmptyState icon={<Vote className="h-4 w-4" />} title={t('gov.nonePending')} />
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {polls.map((poll) => {
+              const progress = pollProgress(poll, ws.votes, activeCount)
+              const closed = isClosed(poll.closes_at)
+              const canApply = isAdmin && !poll.result_applied && closed && progress.quorumMet
+              const targetName = poll.target_user_id ? nameOf(poll.target_user_id) : ''
+              const outcome =
+                poll.kind === 'member_removal'
+                  ? removalVerdict(poll, ws.votes, activeCount)
+                  : null
+              const elected = poll.kind === 'manager_selection' ? managerWinner(poll, ws.votes, activeCount) : null
+
+              return (
+                <div key={poll.id} className="card p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-extrabold leading-snug text-ink-900">{poll.question}</p>
+                      <p className="mt-1 text-[10px] text-ink-400">
+                        {t('gov.turnout', {
+                          votes: progress.votes,
+                          members: progress.activeMembers,
+                          required: progress.required,
+                        })}
+                      </p>
+                    </div>
+                    <Pill tone={poll.result_applied ? 'success' : closed ? 'neutral' : 'brand'}>
+                      {poll.result_applied ? t('gov.applied') : t('gov.openUntil', { date: shortDate(poll.closes_at.slice(0, 10)) })}
+                    </Pill>
+                  </div>
+
+                  <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-ink-100">
+                    <div
+                      className={`h-full rounded-full ${progress.quorumMet ? 'bg-emerald-500' : 'bg-amber-400'}`}
+                      style={{
+                        width: `${Math.min(100, (progress.votes / Math.max(1, progress.required)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <p
+                    className={`mt-1 text-[10px] font-semibold ${
+                      progress.quorumMet ? 'text-emerald-700' : 'text-amber-700'
+                    }`}
+                  >
+                    {progress.quorumMet
+                      ? t('gov.quorumMet')
+                      : t('gov.quorumMissing', { count: Math.max(0, progress.required - progress.votes) })}
+                  </p>
+
+                  <ul className="mt-2 space-y-1">
+                    {poll.options.map((option, index) => (
+                      <li
+                        key={`${poll.id}-${index}`}
+                        className="flex items-center justify-between rounded-lg bg-ink-50 px-2.5 py-1.5 text-[11px]"
+                      >
+                        <span className="truncate font-semibold text-ink-700">{option}</span>
+                        <span className="shrink-0 font-extrabold tabular-nums text-ink-500">
+                          {progress.counts[index] ?? 0}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {poll.result_applied ? (
+                    <p className="mt-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800">
+                      {poll.kind === 'member_removal'
+                        ? outcome === 'remove_and_ban'
+                          ? t('gov.removedBanned')
+                          : t('gov.removedRejoin')
+                        : elected
+                          ? `${t('gov.managerElected')} ${nameOf(elected)}`
+                          : t('gov.applied')}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {canApply ? (
+                      <Button size="sm" loading={busy} onClick={() => run(() => backend.applyPollResult(poll.id), t('gov.applied'))}>
+                        {t('gov.applyResult')}
+                      </Button>
+                    ) : null}
+                    {poll.kind === 'member_removal' && poll.target_user_id ? (
+                      <button
+                        onClick={() => downloadMemberStatement(ws, poll.target_user_id as string)}
+                        className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-[10px] font-bold text-brand-700 hover:bg-brand-50"
+                      >
+                        <Download className="h-3 w-3" /> {t('gov.exportStatement')}
+                        {targetName ? ` · ${targetName}` : ''}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <Modal
+        open={electionOpen}
+        onClose={() => setElectionOpen(false)}
+        title={t('gov.electionTitle')}
+        subtitle={t('gov.electionSub')}
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setElectionOpen(false)}>
+              {t('hub.cancel')}
+            </Button>
+            <Button
+              className="flex-1"
+              loading={busy}
+              disabled={candidates.length < 2}
+              onClick={startElection}
+            >
+              {t('gov.startPoll')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="label">{t('gov.candidates')}</label>
+            <div className="space-y-1.5">
+              {active.map((member) => {
+                const checked = candidates.includes(member.user_id)
+                return (
+                  <label
+                    key={member.id}
+                    className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-ink-100 px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setCandidates((current) =>
+                          checked
+                            ? current.filter((id) => id !== member.user_id)
+                            : [...current, member.user_id],
+                        )
+                      }
+                      className="h-4 w-4 rounded border-ink-300"
+                    />
+                    <span className="text-xs font-bold text-ink-800">{member.profile.full_name}</span>
+                    {member.role !== 'member' ? (
+                      <Pill tone={member.role === 'admin' ? 'gold' : 'brand'}>{t(`role.${member.role}`)}</Pill>
+                    ) : null}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="label">{t('gov.closesIn')}</label>
+            <select className="field" value={electionDays} onChange={(event) => setElectionDays(event.target.value)}>
+              {['1', '2', '3', '7'].map((value) => (
+                <option key={value} value={value}>
+                  {t('gov.days', { count: Number(value) })}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(removalFor)}
+        onClose={() => setRemovalFor(null)}
+        title={t('gov.removalTitle', { name: removalFor?.profile.full_name ?? '' })}
+        subtitle={t('gov.removalHint')}
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setRemovalFor(null)}>
+              {t('hub.cancel')}
+            </Button>
+            <Button className="flex-1" loading={busy} onClick={startRemoval}>
+              {t('gov.startPoll')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs leading-relaxed text-ink-500">{t('gov.removalBody')}</p>
+          <div>
+            <label className="label">{t('gov.closesIn')}</label>
+            <select className="field" value={removalDays} onChange={(event) => setRemovalDays(event.target.value)}>
+              {['1', '2', '3', '7'].map((value) => (
+                <option key={value} value={value}>
+                  {t('gov.days', { count: Number(value) })}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
+
 function weekdayLabel(iso: string): string {
   return new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })
 }
@@ -438,8 +893,11 @@ function SettingsTab() {
   const [lockHour, setLockHour] = useState(String(ws?.mess.meal_lock_hour ?? 22))
   const [displayName, setDisplayName] = useState(user?.full_name ?? '')
   const [nextMonth, setNextMonth] = useState(monthOptions(4)[1]?.label ?? '')
-  const [removing, setRemoving] = useState<MessMember | null>(null)
   const [leaving, setLeaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [closing, setClosing] = useState<MonthlyCycle | null>(null)
+  const [errorRows, setErrorRows] = useState<ClientError[] | null>(null)
+  const [errorsBusy, setErrorsBusy] = useState(false)
   const monthChoices = monthOptions(4)
 
   if (!ws || !user) return null
@@ -447,6 +905,18 @@ function SettingsTab() {
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
   const isAdmin = myRole === 'admin'
+  const myRequest = openRequestFor(ws.requests, user.id)
+
+  const loadErrors = async () => {
+    setErrorsBusy(true)
+    try {
+      setErrorRows(await backend.loadClientErrors())
+    } catch {
+      setErrorRows([])
+    } finally {
+      setErrorsBusy(false)
+    }
+  }
 
   const saveMess = () =>
     run(
@@ -462,6 +932,35 @@ function SettingsTab() {
   const startCycle = async () => {
     const ok = await run(() => backend.createCycle(nextMonth), `Cycle for ${monthTitle(nextMonth)} is open`)
     if (ok) setCycleId('')
+  }
+
+  const closingReview = closing ? closeOutReview(ws, closing, computeSettlement(ws, closing.id)) : null
+  const symbol = ws.mess.currency_symbol
+
+  const issueText = (issue: CloseOutIssue): string => {
+    switch (issue.kind) {
+      case 'pendingBazar':
+        return t('hub.closePendingBazar', {
+          count: issue.count ?? 0,
+          amount: money(issue.amount ?? 0, symbol),
+        })
+      case 'noMeals':
+        return t('hub.closeNoMeals')
+      case 'noUtilities':
+        return t('hub.closeNoUtilities')
+      case 'noDeposits':
+        return t('hub.closeNoDeposits')
+      case 'dues':
+        return t('hub.closeDues', { count: issue.count ?? 0, amount: money(issue.amount ?? 0, symbol) })
+      case 'credit':
+        return t('hub.closeCredit', { count: issue.count ?? 0, amount: money(issue.amount ?? 0, symbol) })
+    }
+  }
+
+  const confirmClose = async () => {
+    if (!closing) return
+    const ok = await run(() => backend.setCycleStatus(closing.id, 'closed'), t('hub.closeDone'))
+    if (ok) setClosing(null)
   }
 
   return (
@@ -573,13 +1072,6 @@ function SettingsTab() {
                         <option value="manager">{t('role.manager')}</option>
                         <option value="member">{t('role.member')}</option>
                       </select>
-                      <button
-                        onClick={() => setRemoving(member)}
-                        title={t('hub.removeMember')}
-                        className="rounded-md p-1 text-ink-300 transition hover:bg-rose-50 hover:text-rose-500"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
                     </>
                   ) : (
                     <Pill tone={member.role === 'admin' ? 'gold' : member.role === 'manager' ? 'brand' : 'neutral'}>
@@ -609,10 +1101,10 @@ function SettingsTab() {
                 </button>
                 {canManage && entry.status === 'open' ? (
                   <button
-                    onClick={() => run(() => backend.setCycleStatus(entry.id, 'closed'), 'Cycle closed')}
-                    className="rounded-md px-1.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50"
+                    onClick={() => setClosing(entry)}
+                    className="inline-flex min-h-9 items-center rounded-md px-2 py-1 text-[11px] font-bold text-rose-600 transition hover:bg-rose-50 max-md:min-h-11"
                   >
-                    {t('hub.close')}
+                    {t('hub.reviewClose')}
                   </button>
                 ) : null}
               </div>
@@ -661,6 +1153,33 @@ function SettingsTab() {
           </div>
         )}
 
+        {isAdmin ? (
+          <div className="card p-4">
+            <SectionHeading title={t('hub.appErrors')} hint={t('hub.appErrorsHint')} />
+            <Button variant="secondary" className="w-full" loading={errorsBusy} onClick={loadErrors}>
+              <ShieldAlert className="h-4 w-4" /> {t('hub.loadErrors')}
+            </Button>
+            {errorRows ? (
+              errorRows.length === 0 ? (
+                <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                  {t('hub.noErrors')}
+                </p>
+              ) : (
+                <div className="mt-2 space-y-1.5">
+                  {errorRows.map((row) => (
+                    <div key={row.id} className="rounded-lg bg-ink-50 px-2.5 py-2">
+                      <p className="line-clamp-2 text-[11px] font-semibold text-ink-800">{row.message}</p>
+                      <p className="mt-0.5 text-[10px] text-ink-400">
+                        {t('hub.errorAt', { route: row.route || '/', when: timeAgo(row.created_at) })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="card p-4">
           <SectionHeading title={t('hub.dataPrivacy')} hint={t('hub.dataPrivacyHint')} />
           <div className="space-y-2">
@@ -679,11 +1198,24 @@ function SettingsTab() {
             </Button>
           </div>
           <p className="mt-2 text-[10px] leading-relaxed text-ink-400">{t('hub.exportHint')}</p>
+          {myRequest ? (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[10px] font-semibold leading-relaxed text-amber-800">
+              {t('gov.yourRequest', {
+                kind: myRequest.kind === 'delete' ? t('gov.kindDelete') : t('gov.kindLeave'),
+              })}
+            </p>
+          ) : null}
           <button
             onClick={() => setLeaving(true)}
             className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-200 px-3 py-2 text-[10px] font-bold text-ink-400 transition hover:border-rose-200 hover:text-rose-500"
           >
             <Trash2 className="h-3 w-3" /> {t('hub.leaveMess')}
+          </button>
+          <button
+            onClick={() => setDeleting(true)}
+            className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-200 px-3 py-2 text-[10px] font-bold text-ink-400 transition hover:border-rose-200 hover:text-rose-500"
+          >
+            <ShieldAlert className="h-3 w-3" /> {t('gov.requestDeletion')}
           </button>
           <p className="mt-2 text-[10px] leading-relaxed text-ink-300">{t('hub.accountDeleteNote')}</p>
         </div>
@@ -712,38 +1244,92 @@ function SettingsTab() {
       </div>
 
       <Modal
-        open={Boolean(removing)}
-        onClose={() => setRemoving(null)}
-        title={t('hub.removeTitle', { name: removing?.profile.full_name ?? '' })}
+        open={closing !== null}
+        onClose={() => setClosing(null)}
+        title={t('hub.closeTitle', { month: monthTitle(closing?.month_label ?? '') })}
+        subtitle={t('hub.closeSub')}
         footer={
-          <div className="flex gap-2">
-            <Button variant="secondary" className="flex-1" onClick={() => setRemoving(null)}>
-              {t('hub.cancel')}
+          <div className="flex flex-col gap-2 xs:flex-row-reverse">
+            <Button className="flex-1" loading={busy} onClick={confirmClose}>
+              <Lock className="h-4 w-4" /> {t('hub.closeConfirm')}
             </Button>
-            <Button
-              className="flex-1"
-              loading={busy}
-              onClick={async () => {
-                if (!removing) return
-                const ok = await run(
-                  () => backend.removeMember(removing.id),
-                  `${removing.profile.full_name} was removed from the mess`,
-                )
-                if (ok) setRemoving(null)
-              }}
-            >
-              {t('hub.remove')}
+            <Button variant="secondary" className="flex-1" onClick={() => setClosing(null)}>
+              {t('hub.cancel')}
             </Button>
           </div>
         }
       >
-        <p className="text-xs leading-relaxed text-ink-500">{t('hub.removeBody')}</p>
+        {closingReview ? (
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">
+                {t('hub.closeSummary')}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  {
+                    label: t('hub.closeMealRate'),
+                    value: money(closingReview.settlement.mealRate, symbol),
+                  },
+                  { label: t('hub.closeMeals'), value: String(closingReview.settlement.totalMeals) },
+                  {
+                    label: t('hub.closeBazar'),
+                    value: money(closingReview.settlement.totalBazar, symbol),
+                  },
+                  {
+                    label: t('hub.closeDeposits'),
+                    value: money(closingReview.settlement.totalDeposits, symbol),
+                  },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-xl bg-ink-50 px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">
+                      {stat.label}
+                    </p>
+                    <p className="mt-0.5 text-sm font-extrabold tabular-nums text-ink-900">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {closingReview.issues.length === 0 ? (
+                <p className="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-[11px] font-semibold text-emerald-800">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  {t('hub.closeReady')}
+                </p>
+              ) : (
+                closingReview.issues.map((issue) => (
+                  <p
+                    key={issue.kind}
+                    className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-[11px] font-medium ${
+                      issue.tone === 'warn' ? 'bg-amber-50 text-amber-800' : 'bg-ink-50 text-ink-600'
+                    }`}
+                  >
+                    {issue.tone === 'warn' ? (
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span>{issueText(issue)}</span>
+                  </p>
+                ))
+              )}
+              {closingReview.transfers > 0 ? (
+                <p className="rounded-xl bg-brand-50 px-3 py-2.5 text-[11px] font-semibold text-brand-800">
+                  {t('hub.closeTransfers', { count: closingReview.transfers })}
+                </p>
+              ) : null}
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-ink-500">{t('hub.closeLockNote')}</p>
+          </div>
+        ) : null}
       </Modal>
 
       <Modal
         open={leaving}
         onClose={() => setLeaving(false)}
-        title={t('hub.leaveTitle', { name: ws.mess.name })}
+        title={t('gov.leaveTitle', { name: ws.mess.name })}
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" className="flex-1" onClick={() => setLeaving(false)}>
@@ -753,16 +1339,41 @@ function SettingsTab() {
               className="flex-1"
               loading={busy}
               onClick={async () => {
-                const ok = await run(() => backend.leaveMess(), 'You left the mess')
+                const ok = await run(() => backend.requestLeave('leave'), 'Leave request sent to the admin')
                 if (ok) setLeaving(false)
               }}
             >
-              {t('hub.leave')}
+              {t('gov.sendRequest')}
             </Button>
           </div>
         }
       >
-        <p className="text-xs leading-relaxed text-ink-500">{t('hub.leaveBody')}</p>
+        <p className="text-xs leading-relaxed text-ink-500">{t('gov.leaveBody')}</p>
+      </Modal>
+
+      <Modal
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        title={t('gov.deleteTitle')}
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setDeleting(false)}>
+              {t('hub.cancel')}
+            </Button>
+            <Button
+              className="flex-1"
+              loading={busy}
+              onClick={async () => {
+                const ok = await run(() => backend.requestLeave('delete'), t('gov.requestSent'))
+                if (ok) setDeleting(false)
+              }}
+            >
+              {t('gov.requestDeletion')}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-xs leading-relaxed text-ink-500">{t('gov.deleteBody')}</p>
       </Modal>
     </div>
   )

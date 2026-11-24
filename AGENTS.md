@@ -8,7 +8,7 @@ product, data model, financial formulas, security model and deployment.
 
 ```bash
 npm run typecheck   # tsc --noEmit
-bun test            # 6 files, 42 tests
+bun test            # 8 files, 67 tests
 npm run build       # tsc + vite build
 npm run dev         # 127.0.0.1:5273
 ```

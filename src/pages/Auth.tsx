@@ -13,7 +13,7 @@ import {
   Vote,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { Button, Pill } from '../components/ui'
+import { Button, Modal, Pill } from '../components/ui'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { useI18n } from '../lib/i18n'
 
@@ -187,6 +187,22 @@ export function OnboardingScreen() {
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('৳')
   const [code, setCode] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const deleteAccount = async () => {
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      await backend.deleteAccount()
+      await signOut()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Could not delete the account.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
   return (
     <div className="min-h-dvh bg-ink-50">
@@ -315,8 +331,42 @@ export function OnboardingScreen() {
               <p className="rounded-xl bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-600">{error}</p>
             </div>
           ) : null}
+
+          {/* Leaving a mess makes this screen the only place the member still
+              sees, so account deletion has to live here once the admin has
+              approved their leave request. */}
+          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-ink-200 px-3 py-2.5">
+            <p className="text-[10px] leading-relaxed text-ink-400">{t('hub.accountDeleteNote')}</p>
+            <button
+              onClick={() => setDeleting(true)}
+              className="shrink-0 text-[10px] font-bold text-rose-500 hover:text-rose-600"
+            >
+              {t('gov.requestDeletion')}
+            </button>
+          </div>
         </div>
       </div>
+
+      <Modal
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        title={t('gov.deleteTitle')}
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setDeleting(false)}>
+              {t('hub.cancel')}
+            </Button>
+            <Button className="flex-1" variant="danger" loading={deleteBusy} onClick={deleteAccount}>
+              {t('gov.requestDeletion')}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-xs leading-relaxed text-ink-500">{t('gov.deleteBody')}</p>
+        {deleteError ? (
+          <p className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-600">{deleteError}</p>
+        ) : null}
+      </Modal>
     </div>
   )
 }

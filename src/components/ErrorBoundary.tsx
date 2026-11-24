@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { reportClientError } from '../lib/telemetry'
 
 interface Props {
   children: ReactNode
@@ -19,6 +20,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('Mess Mates crashed:', error, info.componentStack)
+    // Lands in the mess's own client_errors table, readable by its admin.
+    reportClientError({ message: error.message, stack: error.stack, componentStack: info.componentStack ?? undefined })
   }
 
   render() {
