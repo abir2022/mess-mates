@@ -37,6 +37,12 @@ html[lang='bn'] body {
   line-height: 1.7;
 }
 
+/* The wide tracking on Latin caps labels is unreadable in Bengali, which has no
+   letter-spacing convention — neutralise it wherever the UI is in Bangla. */
+html[lang='bn'] body * {
+  letter-spacing: normal;
+}
+
 @layer components {
   .card {
     @apply rounded-2xl border border-ink-100 bg-white shadow-card;

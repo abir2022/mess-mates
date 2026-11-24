@@ -16,7 +16,7 @@ const variants: Record<Variant, string> = {
 }
 
 const sizes: Record<Size, string> = {
-  sm: 'text-xs px-3 py-2 gap-1.5 rounded-lg min-h-9',
+  sm: 'text-xs px-3 py-2 gap-1.5 rounded-lg min-h-11 sm:min-h-9',
   md: 'text-sm px-4 py-2.5 gap-2 rounded-xl min-h-11',
   lg: 'text-sm px-5 py-3 gap-2 rounded-xl min-h-12',
 }
@@ -141,7 +141,7 @@ export function Tabs<T extends string>({
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`flex min-h-9 flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-bold transition active:scale-[0.98] sm:flex-1 ${
+          className={`flex min-h-11 min-w-11 flex-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold transition active:scale-[0.98] max-sm:[&_svg]:hidden sm:min-h-9 sm:flex-1 sm:px-3.5 ${
             value === tab.id ? 'bg-white text-brand-700 shadow-sm' : 'text-ink-500 hover:text-ink-700'
           }`}
         >
@@ -239,7 +239,7 @@ export function Stepper({
         aria-label="Decrease"
         disabled={disabled || value <= min}
         onClick={() => onChange(clamp(value - step))}
-        className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 active:bg-ink-200 disabled:opacity-30"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 active:bg-ink-200 disabled:opacity-30 max-md:h-11 max-md:w-11"
       >
         <Minus className="h-4 w-4" />
       </button>
@@ -251,7 +251,7 @@ export function Stepper({
         aria-label="Increase"
         disabled={disabled || value >= max}
         onClick={() => onChange(clamp(value + step))}
-        className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 active:bg-ink-200 disabled:opacity-30"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 active:bg-ink-200 disabled:opacity-30 max-md:h-11 max-md:w-11"
       >
         <Plus className="h-4 w-4" />
       </button>

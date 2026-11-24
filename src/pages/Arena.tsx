@@ -154,7 +154,7 @@ function PollsTab() {
                         key={`${poll.id}-${index}`}
                         disabled={status.closed || busy}
                         onClick={() => run(() => backend.vote(poll.id, index), 'Vote counted')}
-                        className={`relative flex w-full items-center justify-between overflow-hidden rounded-xl border px-3 py-2.5 text-left transition ${
+                        className={`relative flex min-h-11 w-full items-center justify-between overflow-hidden rounded-xl border px-3 py-2.5 text-left transition ${
                           isMine ? 'border-brand-400 bg-brand-50/80' : 'border-ink-200 hover:border-brand-300'
                         } disabled:cursor-default`}
                       >
@@ -187,7 +187,7 @@ function PollsTab() {
                   {canManage || poll.created_by === user.id ? (
                     <button
                       onClick={() => run(() => backend.deletePoll(poll.id), 'Poll removed')}
-                      className="inline-flex items-center gap-1 font-bold text-ink-400 hover:text-rose-500"
+                      className="-my-2 inline-flex min-h-11 items-center gap-1 px-1 font-bold text-ink-400 hover:text-rose-500"
                     >
                       <Trash2 className="h-3 w-3" /> {t('arena.delete')}
                     </button>
@@ -240,7 +240,7 @@ function PollsTab() {
                 {options.length > 2 ? (
                   <button
                     onClick={() => setOptions((current) => current.filter((_, position) => position !== index))}
-                    className="rounded-lg px-2 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg px-2 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
                     aria-label={t('arena.removeOption')}
                   >
                     <Trash2 className="h-4 w-4" />

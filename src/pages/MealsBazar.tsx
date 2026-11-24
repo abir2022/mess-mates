@@ -86,7 +86,7 @@ export function MealsBazar() {
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <button
                 onClick={() => setDate((current) => addDays(current, -1))}
-                className="rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
                 aria-label={t('meals.prevDay')}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -102,7 +102,7 @@ export function MealsBazar() {
               </div>
               <button
                 onClick={() => setDate((current) => addDays(current, 1))}
-                className="rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
                 aria-label={t('meals.nextDay')}
               >
                 <ChevronRight className="h-4 w-4" />

@@ -154,7 +154,7 @@ function BoardTab() {
             {canManage ? (
               <button
                 onClick={() => setAnnouncement((value) => !value)}
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold transition ${
+                className={`inline-flex min-h-11 items-center gap-1 rounded-full px-3 py-2 text-[11px] font-bold transition sm:min-h-0 sm:px-2 sm:py-1 sm:text-[10px] ${
                   announcement ? 'bg-amber-100 text-amber-800' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'
                 }`}
               >

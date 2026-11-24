@@ -112,7 +112,7 @@ export function Dashboard() {
           </div>
           <Link
             to="/settlement"
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-brand-700"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-brand-700"
           >
             {t('dash.settlement')} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
@@ -147,15 +147,15 @@ export function Dashboard() {
           <div className="relative mt-5 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.meals')}</p>
-              <p className="text-sm font-extrabold tabular-nums">{settlement.totalMeals.toFixed(1)}</p>
+              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{settlement.totalMeals.toFixed(1)}</p>
             </div>
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.bazar')}</p>
-              <p className="text-sm font-extrabold tabular-nums">{money(settlement.totalBazar, symbol)}</p>
+              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{money(settlement.totalBazar, symbol)}</p>
             </div>
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.pending')}</p>
-              <p className="text-sm font-extrabold tabular-nums">{money(settlement.pendingBazar, symbol)}</p>
+              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{money(settlement.pendingBazar, symbol)}</p>
             </div>
           </div>
 
@@ -230,7 +230,7 @@ export function Dashboard() {
           </div>
           <Link
             to="/meals"
-            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-ink-800"
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-ink-800"
           >
             <UtensilsCrossed className="h-3.5 w-3.5" /> {t('dash.logMeals')}
           </Link>
@@ -249,7 +249,7 @@ export function Dashboard() {
               <stat.icon className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-ink-400">
+              <p className="text-[10px] font-bold uppercase leading-tight tracking-wide text-ink-400">
                 {t(stat.label as MessageKey)}
               </p>
               <p className="truncate text-sm font-extrabold tabular-nums text-ink-900">{stat.value}</p>
@@ -294,7 +294,7 @@ export function Dashboard() {
                 </Button>
                 <Link
                   to="/hub"
-                  className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-50"
+                  className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-50"
                 >
                   {t('dash.viewRoster')}
                 </Link>
@@ -336,13 +336,13 @@ export function Dashboard() {
             rate: money(settlement.mealRate, symbol),
           })}
           action={
-            <Link to="/settlement" className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-800">
+            <Link to="/settlement" className="-my-2 inline-flex min-h-11 items-center gap-1 px-1 text-xs font-bold text-brand-700 hover:text-brand-800">
               <CalendarDays className="h-3.5 w-3.5" /> {t('dash.monthEnd')}
             </Link>
           }
         />
         <div className="card overflow-hidden">
-          <div className="divide-y divide-ink-100 md:hidden print:hidden">
+          <div className="divide-y divide-ink-100 xl:hidden print:hidden">
             {settlement.members.map((member) => (
               <div
                 key={member.userId}
@@ -387,7 +387,7 @@ export function Dashboard() {
                   <button
                     onClick={() => remindMember(member.userId, Math.abs(member.balance))}
                     disabled={busy}
-                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-ink-200 py-2 text-[11px] font-bold text-ink-600 transition hover:border-brand-300 hover:text-brand-700"
+                    className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-ink-200 py-2 text-[11px] font-bold text-ink-600 transition hover:border-brand-300 hover:text-brand-700"
                   >
                     <BellRing className="h-3.5 w-3.5" /> {t('dash.send')}
                   </button>
@@ -395,7 +395,7 @@ export function Dashboard() {
               </div>
             ))}
           </div>
-          <div className="hidden overflow-x-auto md:block print:block">
+          <div className="hidden overflow-x-auto xl:block print:block">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-ink-100 bg-ink-50/60">
@@ -480,7 +480,7 @@ export function Dashboard() {
           <Trophy className="h-3.5 w-3.5 text-amber-500" />{' '}
           {t('dash.guildRank', { points: ws.mess.guild_points.toLocaleString() })}
         </p>
-        <Link to="/arena" className="text-[11px] font-bold text-brand-700 hover:text-brand-800">
+        <Link to="/arena" className="inline-flex min-h-11 items-center px-1 text-[11px] font-bold text-brand-700 hover:text-brand-800">
           {t('dash.openArena')}
         </Link>
       </div>

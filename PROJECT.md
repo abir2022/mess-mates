@@ -661,6 +661,9 @@ Semantic classes in `src/index.css`: `.card`, `.field`, `.label`, `.chip`, `.nav
 Typography: **Plus Jakarta Sans** for UI, **Hind Siliguri** for Bengali (`html[lang='bn']`),
 `tabular-nums` for every amount, sentence-case labels (all-caps is reserved for the 10 px guild
 badge). Type floor: 14 px body, 12 px metadata, 16 px inputs on phones so iOS never zooms.
+The Bangla UI sets `letter-spacing: normal` on every element — the wide tracking used for Latin
+caps labels is unreadable in Bengali. Touch-target floor is 44 px at phone widths, enforced in the
+`Button`/`IconButton`/`Stepper`/`Tabs` primitives.
 
 ### 19.2 The application shell
 
@@ -678,8 +681,9 @@ Modals are bottom sheets on phones (drag handle, sticky header/footer, body scro
 ### 19.3 Responsive patterns used
 
 1. **Tables become cards.** `Dashboard` member breakdown and the `Settlement` statement render a
-   `hidden md:block print:block` table plus an `md:hidden print:hidden` card list. Printing always
-   uses the table.
+   `hidden xl:block print:block` table plus an `xl:hidden print:hidden` card list. The switch is at
+   `xl` (1280 px) because the 7- and 11-column tables need ~720 px; below that the table would
+   scroll sideways inside its card. Printing always uses the table.
 2. **Steppers stack.** Meal steppers go `grid-cols-1 → xs:2 → xl:4`; form field pairs go
    `grid-cols-1 → sm:2`.
 3. **Forms first on phones.** The auth screen puts the sign-in card above the marketing hero
@@ -708,5 +712,24 @@ EN+BN for every string.
 - `npm run typecheck` — pass.
 - `bun test` — 31 pass / 0 fail.
 - `npm run build` — pass (same >500 kB vendor chunk warning from jsPDF).
-- **Not verified:** no browser click-through at 360/768/1440 px, no Lighthouse run, no screen
-  reader pass. Layout changes are static-review verified only.
+
+**Checked in a real browser** (Chromium, demo backend so no sign-in is needed: run
+`VITE_SUPABASE_URL= VITE_SUPABASE_PUBLISHABLE_KEY= npx vite --port 5274`): every route at 360 px
+and 1280 px, plus 768 px for the shell. Measured in the page, not by eye:
+
+- `document.scrollWidth <= innerWidth` on all five routes at 360 px — no sideways scrolling.
+- Every `button`/`a` in `main` and the header is at least 44 px tall at 360 px (the audit found and
+  fixed: `Button size="sm"` and `Tabs` were 36 px, `Stepper` ±36 px, meal-grid day arrows 38 px,
+  poll option buttons 38 px, the Settlement back link 32 px and its print/PDF buttons 38 px).
+- The `Tabs` strip fits without clipping at 360 px (icons are hidden below `sm` so long labels such
+  as "Settlement" and "Settings" fit); it still scrolls if a future tab is added.
+- Bangla at 360 px: same checks pass. Labels no longer carry Latin letter-spacing (see §19.1).
+
+Fixed from the review: duplicated "Live draft" status on the Settlement header (the pill already
+shows it), clipped 10 px stat labels on the dashboard stat cards (now wrap to two lines), clipped
+`৳17,500.00` in the hero's three-up figures (12 px below `sm`), and the table/card switch moved from
+`md` to `xl` so tablets stop scrolling a wide table inside a narrow card.
+
+**Still not verified:** no Lighthouse or axe run, no screen-reader pass, and no check with a real
+Supabase session (only the seeded demo workspace). Hover/focus states were not exercised with a
+keyboard.
