@@ -1,5 +1,5 @@
 /* Mess Mates service worker — app-shell cache with network-first updates. */
-const CACHE = 'mess-mates-v1'
+const CACHE = 'mess-mates-v2'
 const SHELL = ['./', './index.html', './manifest.webmanifest', './logo.png']
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,10 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting()
+})
+
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return
@@ -29,8 +33,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        const copy = response.clone()
-        caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {})
+        // Only keep real, same-origin 200s; a cached error page would stick
+        // around and hide a later deploy.
+        if (response.ok && response.type === 'basic') {
+          const copy = response.clone()
+          caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {})
+        }
         return response
       })
       .catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html'))),

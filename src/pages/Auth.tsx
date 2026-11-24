@@ -14,13 +14,16 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { Button, Pill } from '../components/ui'
+import { LanguageToggle } from '../components/LanguageToggle'
+import { useI18n } from '../lib/i18n'
 
 export function SplashScreen() {
+  const { t } = useI18n()
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-50">
       <div className="flex flex-col items-center gap-3">
         <img src="/logo.png" alt="Mess Mates" className="h-16 w-16 animate-float rounded-2xl" />
-        <p className="text-sm font-bold text-ink-500">Loading your mess…</p>
+        <p className="text-sm font-bold text-ink-500">{t('auth.splash')}</p>
       </div>
     </div>
   )
@@ -28,6 +31,7 @@ export function SplashScreen() {
 
 export function AuthScreen() {
   const { backend, busy, signInWithGoogle, signInDemo, signInWithEmail, error } = useApp()
+  const { t } = useI18n()
   const isDemo = backend.mode === 'demo'
   const [email, setEmail] = useState('')
   const [showEmail, setShowEmail] = useState(false)
@@ -45,27 +49,24 @@ export function AuthScreen() {
             </div>
             <div>
               <p className="text-lg font-extrabold tracking-tight">Mess Mates</p>
-              <p className="text-[11px] font-semibold text-brand-100/80">Mess accounting · Guild arena</p>
+              <p className="text-[11px] font-semibold text-brand-100/80">{t('app.tagline')}</p>
             </div>
           </div>
 
           <h1 className="mt-8 max-w-lg text-3xl font-extrabold leading-tight md:mt-12 md:text-[2.6rem]">
-            Every meal counted.
+            {t('auth.headline1')}
             <br />
-            Every taka settled.
-            <span className="block text-brand-200">Zero mess drama.</span>
+            {t('auth.headline2')}
+            <span className="block text-brand-200">{t('auth.headline3')}</span>
           </h1>
-          <p className="mt-3 max-w-md text-sm text-brand-50/80">
-            Track meals, bazar and deposits for your hostel or bachelor mess — then settle the month in one tap. Plus
-            bazar duty rosters, polls and mess-vs-mess guild games.
-          </p>
+          <p className="mt-3 max-w-md text-sm text-brand-50/80">{t('auth.intro')}</p>
 
           <div className="mt-6 grid max-w-md grid-cols-2 gap-2.5">
             {[
-              { icon: BarChart3, label: 'Live meal rate & dues' },
-              { icon: Utensils, label: 'Fast daily meal grid' },
-              { icon: Vote, label: 'Democratic mess polls' },
-              { icon: Swords, label: 'Chess & dice arena' },
+              { icon: BarChart3, label: t('auth.featureRate') },
+              { icon: Utensils, label: t('auth.featureGrid') },
+              { icon: Vote, label: t('auth.featurePolls') },
+              { icon: Swords, label: t('auth.featureArena') },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-xs font-semibold backdrop-blur">
                 <item.icon className="h-4 w-4 text-brand-200" />
@@ -77,40 +78,47 @@ export function AuthScreen() {
 
         <div className="relative mt-10 hidden items-center gap-3 text-[11px] text-brand-100/70 md:flex">
           <ShieldCheck className="h-4 w-4" />
-          Row-Level Security keeps every mess's data private. Installable as a PWA.
+          {t('auth.security')}
         </div>
       </section>
 
       <section className="flex items-center justify-center px-4 py-10 md:px-10">
         <div className="w-full max-w-sm">
+          <div className="mb-3 flex justify-end">
+            <LanguageToggle />
+          </div>
           <div className="card p-6">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-extrabold text-ink-900">Sign in</h2>
-                <p className="mt-1 text-xs text-ink-500">One account, all your messes.</p>
+                <h2 className="text-xl font-extrabold text-ink-900">{t('auth.signIn')}</h2>
+                <p className="mt-1 text-xs text-ink-500">{t('auth.signInSub')}</p>
               </div>
-              {isDemo ? <Pill tone="warn">Demo mode</Pill> : <Pill tone="success">Supabase live</Pill>}
+              {isDemo ? (
+                <Pill tone="warn">{t('auth.demoMode')}</Pill>
+              ) : (
+                <Pill tone="success">{t('auth.live')}</Pill>
+              )}
             </div>
 
             {isDemo ? (
               <div className="space-y-3">
                 <Button className="w-full" size="lg" onClick={signInDemo} loading={busy}>
-                  Enter the demo mess
+                  {t('auth.enterDemo')}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
                 <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800">
-                  Supabase isn't configured yet, so you'll explore a seeded mess: 5 members, live meal rate, polls,
-                  duty roster and guild games. Add <span className="font-mono">VITE_SUPABASE_URL</span> to go live.
+                  {t('auth.demoNote')}
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
                 <Button className="w-full" size="lg" onClick={signInWithGoogle} loading={busy}>
                   <GoogleMark />
-                  Continue with Google
+                  {t('auth.google')}
                 </Button>
                 <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-ink-300">
-                  <span className="h-px flex-1 bg-ink-100" /> or <span className="h-px flex-1 bg-ink-100" />
+                  <span className="h-px flex-1 bg-ink-100" /> {t('auth.or')}{' '}
+                  <span className="h-px flex-1 bg-ink-100" />
                 </div>
                 {showEmail ? (
                   <div className="space-y-2">
@@ -118,7 +126,7 @@ export function AuthScreen() {
                       type="email"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      placeholder="you@example.com"
+                      placeholder={t('auth.emailPlaceholder')}
                       className="field"
                     />
                     <Button
@@ -127,12 +135,12 @@ export function AuthScreen() {
                       disabled={!email.includes('@')}
                       onClick={() => signInWithEmail(email)}
                     >
-                      <Mail className="h-4 w-4" /> Send magic link
+                      <Mail className="h-4 w-4" /> {t('auth.sendLink')}
                     </Button>
                   </div>
                 ) : (
                   <Button className="w-full" variant="secondary" onClick={() => setShowEmail(true)}>
-                    <Mail className="h-4 w-4" /> Use email instead
+                    <Mail className="h-4 w-4" /> {t('auth.useEmail')}
                   </Button>
                 )}
               </div>
@@ -141,7 +149,7 @@ export function AuthScreen() {
             {error ? <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">{error}</p> : null}
 
             <ul className="mt-5 space-y-1.5 border-t border-ink-100 pt-4 text-[11px] text-ink-500">
-              {['Create a mess or join with a 6-character code', 'Meal rate, deposits and dues computed live', 'Settle the month with a printable summary'].map(
+              {[t('auth.bullet1'), t('auth.bullet2'), t('auth.bullet3')].map(
                 (line) => (
                   <li key={line} className="flex items-start gap-1.5">
                     <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" />
@@ -153,7 +161,7 @@ export function AuthScreen() {
           </div>
 
           <p className="mt-4 text-center text-[11px] text-ink-400">
-            Mess Mates · PWA · ৳ BDT by default, any currency supported
+            {t('auth.footer')}
           </p>
         </div>
       </section>
@@ -174,6 +182,7 @@ function GoogleMark() {
 
 export function OnboardingScreen() {
   const { user, backend, busy, createMess, joinMess, signOut, error } = useApp()
+  const { t } = useI18n()
   const [mode, setMode] = useState<'create' | 'join'>('create')
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('৳')
@@ -187,20 +196,23 @@ export function OnboardingScreen() {
             <img src="/logo.png" alt="Mess Mates" className="h-10 w-10 rounded-xl object-cover" />
             <div>
               <p className="text-sm font-extrabold text-ink-900">Mess Mates</p>
-              <p className="text-[11px] text-ink-400">Welcome, {user?.full_name}</p>
+              <p className="text-[11px] text-ink-400">
+                {t('auth.welcome', { name: user?.full_name ?? '' })}
+              </p>
             </div>
           </div>
-          <button onClick={signOut} className="text-xs font-bold text-ink-400 hover:text-rose-500">
-            Sign out
-          </button>
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <button onClick={signOut} className="text-xs font-bold text-ink-400 hover:text-rose-500">
+              {t('common.signOut')}
+            </button>
+          </div>
         </div>
 
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           <div className="md:col-span-2">
-            <h1 className="text-2xl font-extrabold text-ink-900">Set up your mess</h1>
-            <p className="mt-1 text-sm text-ink-500">
-              Start a new mess as admin, or join your roommates with the invite code they shared.
-            </p>
+            <h1 className="text-2xl font-extrabold text-ink-900">{t('auth.setupTitle')}</h1>
+            <p className="mt-1 text-sm text-ink-500">{t('auth.setupBody')}</p>
           </div>
 
           <div className="card p-5">
@@ -209,23 +221,23 @@ export function OnboardingScreen() {
                 <Crown className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-sm font-extrabold text-ink-900">Create a new mess</p>
-                <p className="text-[11px] text-ink-400">You become the admin</p>
+                <p className="text-sm font-extrabold text-ink-900">{t('auth.createTitle')}</p>
+                <p className="text-[11px] text-ink-400">{t('auth.createSub')}</p>
               </div>
             </div>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="label">Mess name</label>
+                <label className="label">{t('auth.messName')}</label>
                 <input
                   className="field"
-                  placeholder="e.g. Chittagong Boys Mess"
+                  placeholder={t('auth.messNamePlaceholder')}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
               </div>
               <div>
-                <label className="label">Currency</label>
+                <label className="label">{t('auth.currency')}</label>
                 <div className="flex gap-2">
                   {['৳', '₹', '$', 'Rs'].map((symbol) => (
                     <button
@@ -251,7 +263,7 @@ export function OnboardingScreen() {
                   createMess(name.trim(), currency)
                 }}
               >
-                Create mess <ArrowRight className="h-4 w-4" />
+                {t('auth.createBtn')} <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -262,14 +274,14 @@ export function OnboardingScreen() {
                 <Dice5 className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-sm font-extrabold text-ink-900">Join an existing mess</p>
-                <p className="text-[11px] text-ink-400">Use the 6-character invite code</p>
+                <p className="text-sm font-extrabold text-ink-900">{t('auth.joinTitle')}</p>
+                <p className="text-[11px] text-ink-400">{t('auth.joinSub')}</p>
               </div>
             </div>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="label">Invite code</label>
+                <label className="label">{t('auth.inviteCode')}</label>
                 <input
                   className="field font-mono text-lg uppercase tracking-[0.35em]"
                   placeholder="ABC123"
@@ -288,11 +300,11 @@ export function OnboardingScreen() {
                   joinMess(code)
                 }}
               >
-                Join mess <ChevronRight className="h-4 w-4" />
+                {t('auth.joinBtn')} <ChevronRight className="h-4 w-4" />
               </Button>
               {backend.mode === 'demo' ? (
                 <p className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] text-ink-500">
-                  Demo invite code: <span className="font-mono font-bold">MM7K2Q</span>
+                  {t('auth.demoCode')} <span className="font-mono font-bold">MM7K2Q</span>
                 </p>
               ) : null}
             </div>

@@ -95,6 +95,18 @@ function normalizeMealValue(value: number): number {
   return Math.max(0, Math.round(value * 2) / 2)
 }
 
+/**
+ * A failure that only means "still offline" must not spend an attempt, or
+ * three manual syncs with no connection would silently discard the change.
+ */
+function looksOffline(error: unknown): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /failed to fetch|fetch failed|networkerror|network error|load failed|network request failed|internet disconnected|err_internet/i.test(
+    message,
+  )
+}
+
 /** Applies one queued operation to a workspace snapshot, returning a new object. */
 export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
   const cycleId = openCycleId(ws)
@@ -400,6 +412,10 @@ export function createOutbox(storage: OutboxStorage | null) {
           synced += 1
         } catch (error) {
           lastError = error instanceof Error ? error.message : 'Could not sync a queued change.'
+          if (looksOffline(error)) {
+            // Keep the queued change untouched until the connection is back.
+            break
+          }
           const attempts = head.attempts + 1
           if (attempts < MAX_ATTEMPTS) {
             save([{ ...head, attempts }, ...rest])

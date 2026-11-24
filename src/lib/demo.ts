@@ -515,6 +515,10 @@ export function createDemoBackend(): Backend {
     async loadWorkspace() {
       if (!state.signedIn) return null
       resetIfNeeded()
+      const mine = state.members.find(
+        (member) => member.user_id === state.profile.id && member.status === 'active',
+      )
+      if (!mine) return null
       return buildWorkspace()
     },
 
@@ -562,6 +566,20 @@ export function createDemoBackend(): Backend {
     async joinMess(code) {
       if (code.trim().toUpperCase() !== state.mess.invite_code) {
         throw new Error('Invalid invite code. Ask your mess admin for the 6-character code.')
+      }
+      const mine = state.members.find((member) => member.user_id === state.profile.id)
+      if (mine) {
+        mine.status = 'active'
+      } else {
+        state.members.push({
+          id: uid('member'),
+          mess_id: state.mess.id,
+          user_id: state.profile.id,
+          role: 'member',
+          status: 'active',
+          joined_at: new Date().toISOString(),
+          profile: state.profile,
+        })
       }
       persist()
     },
@@ -799,6 +817,52 @@ export function createDemoBackend(): Backend {
     async setCycleStatus(cycleId, status) {
       const cycle = state.cycles.find((entry) => entry.id === cycleId)
       if (cycle) cycle.status = status
+      persist()
+    },
+
+    async updateMemberRole(memberId: string, role: Role) {
+      if (myRole() !== 'admin') throw new Error('Only an admin can change roles.')
+      const target = state.members.find((member) => member.id === memberId)
+      if (!target) throw new Error('That member is no longer in the mess.')
+      const admins = state.members.filter((member) => member.status === 'active' && member.role === 'admin')
+      if (target.role === 'admin' && role !== 'admin' && admins.length <= 1) {
+        throw new Error('Keep at least one admin in the mess.')
+      }
+      target.role = role
+      persist()
+    },
+
+    async removeMember(memberId: string) {
+      const mine = myRole()
+      if (!['admin', 'manager'].includes(mine)) {
+        throw new Error('Only an admin or manager can remove a member.')
+      }
+      const target = state.members.find((member) => member.id === memberId)
+      if (!target) throw new Error('That member is no longer in the mess.')
+      if (target.user_id === state.profile.id) {
+        throw new Error('Use "Leave this mess" to remove yourself.')
+      }
+      if (target.role === 'admin' && mine !== 'admin') {
+        throw new Error('Only an admin can remove another admin.')
+      }
+      const admins = state.members.filter((member) => member.status === 'active' && member.role === 'admin')
+      if (target.role === 'admin' && admins.length <= 1) {
+        throw new Error('Keep at least one admin in the mess.')
+      }
+      target.status = 'left'
+      persist()
+    },
+
+    async leaveMess() {
+      const mine = state.members.find(
+        (member) => member.user_id === state.profile.id && member.status === 'active',
+      )
+      if (!mine) return
+      const admins = state.members.filter((member) => member.status === 'active' && member.role === 'admin')
+      if (mine.role === 'admin' && admins.length <= 1) {
+        throw new Error('Make another member an admin before you leave.')
+      }
+      mine.status = 'left'
       persist()
     },
 

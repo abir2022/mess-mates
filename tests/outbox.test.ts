@@ -146,6 +146,19 @@ describe('offline outbox', () => {
     expect(box.count()).toBe(0)
   })
 
+  test('a still-offline retry does not spend an attempt or drop the change', async () => {
+    const box = createOutbox(memoryStorage())
+    box.queue({ kind: 'addBazar', input: { amount: 120, items: 'Fish', date: '2026-11-23' } })
+
+    const offline = async () => {
+      throw new Error('Failed to fetch')
+    }
+    for (let attempt = 0; attempt < 5; attempt += 1) await box.flush(offline)
+
+    expect(box.count()).toBe(1)
+    expect(box.applyPending(workspace()).bazar[0]).toMatchObject({ amount: 120 })
+  })
+
   test('workspace cache round-trips and clears', () => {
     const box = createOutbox(memoryStorage())
     box.cacheWorkspace(workspace())

@@ -17,20 +17,26 @@ import { useApp } from '../context/AppContext'
 import { Avatar, CopyButton, Pill } from './ui'
 import { bannerClass } from '../lib/backend'
 import { monthTitle } from '../lib/format'
+import { useI18n, type MessageKey } from '../lib/i18n'
+import { usePwaUpdate } from '../lib/pwa'
+import { LanguageToggle } from './LanguageToggle'
 
-const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/meals', label: 'Meals & Bazar', icon: UtensilsCrossed, end: false },
-  { to: '/arena', label: 'Arena & Polls', icon: Swords, end: false },
-  { to: '/hub', label: 'Mess Hub', icon: Users, end: false },
+const navItems: { to: string; label: MessageKey; icon: typeof LayoutDashboard; end: boolean }[] = [
+  { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, end: true },
+  { to: '/meals', label: 'nav.meals', icon: UtensilsCrossed, end: false },
+  { to: '/arena', label: 'nav.arena', icon: Swords, end: false },
+  { to: '/hub', label: 'nav.hub', icon: Users, end: false },
 ]
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { ws, user, cycle, signOut, notice, error, clearError, busy, online, pending, syncNow } =
     useApp()
+  const { t } = useI18n()
+  const { updateReady, reload, dismiss } = usePwaUpdate()
   if (!ws || !user) return null
 
   const role = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
+  const roleLabel = t(`role.${role}` as MessageKey)
 
   return (
     <div className="min-h-screen bg-ink-50 md:flex">
@@ -39,7 +45,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <img src="/logo.png" alt="Mess Mates" className="h-11 w-11 rounded-xl object-cover" />
           <div>
             <p className="text-base font-extrabold tracking-tight text-ink-900">Mess Mates</p>
-            <p className="text-[11px] font-semibold text-ink-400">Mess accounting · Guild arena</p>
+            <p className="text-[11px] font-semibold text-ink-400">{t('app.tagline')}</p>
           </div>
         </div>
 
@@ -47,14 +53,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between">
             <span className="text-2xl leading-none">{ws.mess.guild_emblem}</span>
             <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
-              {ws.mess.is_pro_mess ? 'Pro guild' : 'Guild'}
+              {ws.mess.is_pro_mess ? t('layout.proGuild') : t('layout.guild')}
             </span>
           </div>
           <p className="mt-2 line-clamp-1 text-sm font-extrabold">{ws.mess.name}</p>
           <div className="mt-1 flex items-center gap-2 text-[11px] text-white/80">
-            <Trophy className="h-3 w-3" /> {ws.mess.guild_points.toLocaleString()} pts
+            <Trophy className="h-3 w-3" /> {t('layout.points', { points: ws.mess.guild_points.toLocaleString() })}
             <span className="text-white/30">·</span>
-            <span>Code {ws.mess.invite_code}</span>
+            <span>{t('layout.code', { code: ws.mess.invite_code })}</span>
             <CopyButton value={ws.mess.invite_code} label="" />
           </div>
         </div>
@@ -68,21 +74,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
               className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}
             >
               <item.icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
-              {item.label}
+              {t(item.label)}
             </NavLink>
           ))}
         </nav>
 
         <div className="mt-auto space-y-3">
+          <div className="flex justify-end">
+            <LanguageToggle />
+          </div>
           <div className="rounded-xl border border-ink-100 bg-ink-50/60 p-3">
             <div className="flex items-center justify-between text-[11px] font-semibold text-ink-500">
               <span className="inline-flex items-center gap-1">
-                <AlarmClockCheck className="h-3.5 w-3.5" /> {cycle ? monthTitle(cycle.month_label) : 'No cycle'}
+                <AlarmClockCheck className="h-3.5 w-3.5" /> {cycle ? monthTitle(cycle.month_label) : t('layout.noCycle')}
               </span>
               <Pill tone={cycle?.status === 'open' ? 'brand' : 'neutral'}>{cycle?.status ?? '—'}</Pill>
             </div>
             <p className="mt-1 text-[11px] text-ink-400">
-              {ws.members.filter((member) => member.status === 'active').length} members · {role} access
+              {t('layout.members', {
+                count: ws.members.filter((member) => member.status === 'active').length,
+                role: roleLabel,
+              })}
             </p>
           </div>
 
@@ -97,7 +109,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <button
               onClick={signOut}
               disabled={busy}
-              title="Sign out"
+              title={t('common.signOut')}
               className="rounded-lg p-1.5 text-ink-400 transition hover:bg-ink-100 hover:text-rose-500"
             >
               <LogOut className="h-4 w-4" />
@@ -107,9 +119,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {!ws.mess.is_pro_mess ? (
             <div className="rounded-xl bg-gradient-to-br from-ink-900 to-brand-800 p-3 text-white">
               <p className="flex items-center gap-1.5 text-xs font-bold">
-                <Crown className="h-3.5 w-3.5 text-amber-300" /> Go Pro
+                <Crown className="h-3.5 w-3.5 text-amber-300" /> {t('layout.goPro')}
               </p>
-              <p className="mt-1 text-[11px] text-white/70">Ad-free for every mate + premium guild frames.</p>
+              <p className="mt-1 text-[11px] text-white/70">{t('layout.goProBody')}</p>
             </div>
           ) : null}
         </div>
@@ -127,12 +139,34 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <LanguageToggle />
             <Pill tone="brand">{ws.mess.invite_code}</Pill>
             <Avatar name={user.full_name} url={user.avatar_url} frame={user.avatar_frame} size="xs" />
           </div>
         </header>
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-4 md:px-8 md:pb-10 md:pt-8">
+          {updateReady ? (
+            <div className="no-print mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-brand-600 px-3 py-2 text-[11px] font-semibold text-white">
+              <span className="inline-flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> {t('pwa.ready')}
+              </span>
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={reload}
+                  className="rounded-lg bg-white px-2.5 py-1 text-[10px] font-bold text-brand-700 transition hover:bg-brand-50"
+                >
+                  {t('pwa.reload')}
+                </button>
+                <button
+                  onClick={dismiss}
+                  className="rounded-lg px-2 py-1 text-[10px] font-bold text-white/80 transition hover:text-white"
+                >
+                  {t('pwa.later')}
+                </button>
+              </span>
+            </div>
+          ) : null}
           {!online || pending > 0 ? (
             <div
               className={`mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-[11px] font-semibold ${
@@ -142,8 +176,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <span className="inline-flex items-center gap-1.5">
                 {online ? <RefreshCw className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
                 {online
-                  ? `${pending} change${pending === 1 ? '' : 's'} waiting to sync`
-                  : `Offline — showing saved data${pending ? ` · ${pending} queued` : ''}`}
+                  ? t(pending === 1 ? 'layout.waitingOne' : 'layout.waitingSync', { count: pending })
+                  : pending
+                    ? t('layout.offlineQueued', { count: pending })
+                    : t('layout.offline')}
               </span>
               {online && pending > 0 ? (
                 <button
@@ -151,7 +187,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   disabled={busy}
                   className="rounded-lg bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
                 >
-                  Sync now
+                  {t('common.syncNow')}
                 </button>
               ) : null}
             </div>
@@ -177,7 +213,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <span className={`flex h-8 w-12 items-center justify-center rounded-lg transition ${isActive ? 'bg-brand-50' : ''}`}>
                       <item.icon className="h-[18px] w-[18px]" />
                     </span>
-                    {item.label.split(' ')[0]}
+                    {t(item.label).split(' ')[0]}
                   </>
                 )}
               </NavLink>

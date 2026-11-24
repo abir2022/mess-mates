@@ -244,6 +244,27 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       const openCycle = cycles.find((cycle) => cycle.status === 'open') ?? cycles[0] ?? null
       context = { messId, cycleId: openCycle?.id ?? null }
 
+      // Postgres keeps JSON columns under their storage names (`options_json`,
+      // `shopping_list_json`, `state_json`) while the app models them as
+      // `options`, `shopping_list` and `state`. Map them here so live rows have
+      // the same shape as the demo backend instead of reaching the UI undefined.
+      const rowList = (value: unknown) => (value ?? []) as Record<string, unknown>[]
+
+      const duty: BazarDuty[] = rowList(dutyRows.data).map((row) => ({
+        ...(row as unknown as BazarDuty),
+        shopping_list: (row.shopping_list_json as string[] | undefined) ?? [],
+      }))
+
+      const polls: Poll[] = rowList(pollRows.data).map((row) => ({
+        ...(row as unknown as Poll),
+        options: (row.options_json as string[] | undefined) ?? [],
+      }))
+
+      const games: GameRoom[] = rowList(gameRows.data).map((row) => ({
+        ...(row as unknown as GameRoom),
+        state: (row.state_json as Record<string, unknown> | undefined) ?? {},
+      }))
+
       return {
         profile,
         mess: mess as Mess,
@@ -253,11 +274,11 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         bazar: (bazar.data ?? []) as BazarExpense[],
         utilities: (utilities.data ?? []) as FixedUtility[],
         deposits: (deposits.data ?? []) as MemberDeposit[],
-        duty: (dutyRows.data ?? []) as BazarDuty[],
-        polls: (pollRows.data ?? []) as Poll[],
+        duty,
+        polls,
         votes: (voteRows ?? []) as PollVote[],
         messages: (messageRows.data ?? []) as MessMessage[],
-        games: (gameRows.data ?? []) as GameRoom[],
+        games,
         leaderboard: (
           (leaderboardRows.data ?? []) as {
             id: string
@@ -505,7 +526,11 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         })
         .select('*')
         .single()
-      return unwrap<GameRoom>(data, error)
+      const room = unwrap<Record<string, unknown>>(data, error)
+      return {
+        ...(room as unknown as GameRoom),
+        state: (room.state_json as Record<string, unknown> | undefined) ?? {},
+      }
     },
 
     async updateGame(id: string, patch: GamePatch) {
@@ -538,6 +563,22 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     async setCycleStatus(cycleId, status) {
       const { error } = await supabase.from('monthly_cycles').update({ status }).eq('id', cycleId)
       if (error) throw new Error(error.message)
+    },
+
+    async updateMemberRole(memberId, role) {
+      const { error } = await supabase.rpc('set_member_role', { p_member: memberId, p_role: role })
+      if (error) throw new Error(error.message)
+    },
+
+    async removeMember(memberId) {
+      const { error } = await supabase.rpc('remove_mess_member', { p_member: memberId })
+      if (error) throw new Error(error.message)
+    },
+
+    async leaveMess() {
+      const { error } = await supabase.rpc('leave_mess')
+      if (error) throw new Error(error.message)
+      context = null
     },
 
     async upgradePro() {

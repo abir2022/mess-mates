@@ -17,6 +17,7 @@ import { useApp } from '../context/AppContext'
 import { Avatar, Button, EmptyState, Pill, SectionHeading, Stepper, Tabs } from '../components/ui'
 import { depositMethods } from '../lib/backend'
 import { isMealLocked, mealTotal } from '../lib/calc'
+import { useI18n, type MessageKey } from '../lib/i18n'
 import { addDays, money, shortDate, todayISO, weekdayShort } from '../lib/format'
 import type { DepositMethod, MealField } from '../lib/types'
 
@@ -24,15 +25,16 @@ const MAX_PROOF_BYTES = 2 * 1024 * 1024
 
 type TabId = 'meals' | 'bazar' | 'utilities' | 'deposits'
 
-const mealFields: { field: MealField; label: string; step: number; max: number }[] = [
-  { field: 'breakfast', label: 'Breakfast', step: 0.5, max: 3 },
-  { field: 'lunch', label: 'Lunch', step: 1, max: 4 },
-  { field: 'dinner', label: 'Dinner', step: 1, max: 4 },
-  { field: 'guest_meals', label: 'Guests', step: 1, max: 10 },
+const mealFields: { field: MealField; label: MessageKey; step: number; max: number }[] = [
+  { field: 'breakfast', label: 'meals.breakfast', step: 0.5, max: 3 },
+  { field: 'lunch', label: 'meals.lunch', step: 1, max: 4 },
+  { field: 'dinner', label: 'meals.dinner', step: 1, max: 4 },
+  { field: 'guest_meals', label: 'meals.guests', step: 1, max: 10 },
 ]
 
 export function MealsBazar() {
   const { ws, user, settlement, cycle, backend, run, busy } = useApp()
+  const { t } = useI18n()
   const [tab, setTab] = useState<TabId>('meals')
   const [date, setDate] = useState(todayISO())
 
@@ -59,22 +61,22 @@ export function MealsBazar() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">Meals & Bazar</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            Log daily meals, submit bazar expenses and track deposits for {cycle.month_label}.
-          </p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.meals')}</h1>
+          <p className="mt-1 text-sm text-ink-500">{t('meals.subtitle', { month: cycle.month_label })}</p>
         </div>
-        <Pill tone={cycle.status === 'open' ? 'success' : 'neutral'}>{cycle.status === 'open' ? 'Cycle open' : 'Cycle closed'}</Pill>
+        <Pill tone={cycle.status === 'open' ? 'success' : 'neutral'}>
+          {cycle.status === 'open' ? t('meals.cycleOpen') : t('meals.cycleClosed')}
+        </Pill>
       </div>
 
       <Tabs
         value={tab}
         onChange={setTab}
         tabs={[
-          { id: 'meals', label: 'Meal grid', icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
-          { id: 'bazar', label: 'Bazar', icon: <Wallet className="h-3.5 w-3.5" /> },
-          { id: 'utilities', label: 'Fixed utilities', icon: <CircleCheck className="h-3.5 w-3.5" /> },
-          { id: 'deposits', label: 'Deposits', icon: <Plus className="h-3.5 w-3.5" /> },
+          { id: 'meals', label: t('meals.tabMeals'), icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
+          { id: 'bazar', label: t('meals.tabBazar'), icon: <Wallet className="h-3.5 w-3.5" /> },
+          { id: 'utilities', label: t('meals.tabUtilities'), icon: <CircleCheck className="h-3.5 w-3.5" /> },
+          { id: 'deposits', label: t('meals.tabDeposits'), icon: <Plus className="h-3.5 w-3.5" /> },
         ]}
       />
 
@@ -85,7 +87,7 @@ export function MealsBazar() {
               <button
                 onClick={() => setDate((current) => addDays(current, -1))}
                 className="rounded-lg border border-ink-200 p-2 text-ink-500 hover:bg-ink-50"
-                aria-label="Previous day"
+                aria-label={t('meals.prevDay')}
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -101,23 +103,27 @@ export function MealsBazar() {
               <button
                 onClick={() => setDate((current) => addDays(current, 1))}
                 className="rounded-lg border border-ink-200 p-2 text-ink-500 hover:bg-ink-50"
-                aria-label="Next day"
+                aria-label={t('meals.nextDay')}
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
               <Button size="sm" variant="ghost" onClick={() => setDate(todayISO())}>
-                Today
+                {t('meals.today')}
               </Button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <Pill tone={locked ? 'danger' : 'success'}>
                 {locked ? <Lock className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                {cycle.status === 'closed' ? 'Cycle closed' : locked ? 'Locked for members' : 'Editable'}
+                {cycle.status === 'closed'
+                  ? t('meals.cycleClosed')
+                  : locked
+                    ? t('meals.locked')
+                    : t('meals.editable')}
               </Pill>
               <span className="text-xs font-semibold text-ink-500">
                 {weekdayShort(date)} ·{' '}
-                <span className="font-extrabold text-ink-800">{dayTotal.toFixed(1)} meals</span>
+                <span className="font-extrabold text-ink-800">{t('meals.count', { count: dayTotal.toFixed(1) })}</span>
               </span>
             </div>
           </div>
@@ -125,8 +131,7 @@ export function MealsBazar() {
           {locked ? (
             <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] font-medium text-amber-800">
               <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Meal lock cutoff is {ws.mess.meal_lock_hour}:00. Members can't edit past days after the cutoff — ask an
-              admin or manager to make changes.
+              {t('meals.lockNote', { hour: ws.mess.meal_lock_hour })}
             </p>
           ) : null}
 
@@ -142,18 +147,18 @@ export function MealsBazar() {
                       <Avatar name={member.profile.full_name} url={member.profile.avatar_url} frame={member.profile.avatar_frame} size="sm" />
                       <div>
                         <p className="text-xs font-bold text-ink-900">
-                          {member.profile.full_name} {isMe ? <span className="text-brand-600">(you)</span> : null}
+                          {member.profile.full_name} {isMe ? <span className="text-brand-600">{t('dash.you')}</span> : null}
                         </p>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{member.role}</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{t(`role.${member.role}`)}</p>
                       </div>
                     </div>
-                    <Pill tone="brand">{rowTotal.toFixed(1)} meals</Pill>
+                    <Pill tone="brand">{t('meals.count', { count: rowTotal.toFixed(1) })}</Pill>
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {mealFields.map((entry) => (
                       <div key={entry.field} className="flex items-center justify-between gap-1 rounded-lg bg-ink-50 px-2 py-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-500">{entry.label}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-500">{t(entry.label)}</span>
                         <Stepper
                           value={mealValue(member.user_id, entry.field)}
                           step={entry.step}
@@ -171,7 +176,7 @@ export function MealsBazar() {
 
           <div className="card flex items-center justify-between p-4">
             <p className="text-xs font-semibold text-ink-500">
-              Day value at current rate ({money(settlement.mealRate, symbol)})
+              {t('meals.dayValue', { rate: money(settlement.mealRate, symbol) })}
             </p>
             <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(dayTotal * settlement.mealRate, symbol)}</p>
           </div>
@@ -188,6 +193,7 @@ export function MealsBazar() {
 
 function BazarTab() {
   const { ws, user, cycle, backend, run, busy } = useApp()
+  const { t } = useI18n()
   const [amount, setAmount] = useState('')
   const [items, setItems] = useState('')
   const [date, setDate] = useState(todayISO())
@@ -216,10 +222,13 @@ function BazarTab() {
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
       <div className="card h-fit p-4">
-        <SectionHeading title="Submit bazar expense" hint={canManage ? 'Auto-approved for managers' : 'Pending manager approval'} />
+        <SectionHeading
+          title={t('meals.bazarForm')}
+          hint={canManage ? t('meals.autoApproved') : t('meals.pendingApproval')}
+        />
         <div className="space-y-3">
           <div>
-            <label className="label">Amount ({symbol})</label>
+            <label className="label">{t('meals.amount', { symbol })}</label>
             <input
               type="number"
               inputMode="decimal"
@@ -232,23 +241,23 @@ function BazarTab() {
             />
           </div>
           <div>
-            <label className="label">Items summary</label>
+            <label className="label">{t('meals.itemsSummary')}</label>
             <textarea
               className="field min-h-[72px] resize-none"
-              placeholder="Rice 10kg, oil 2L, vegetables…"
+              placeholder={t('meals.itemsPlaceholder')}
               value={items}
               onChange={(event) => setItems(event.target.value)}
             />
           </div>
           <div>
-            <label className="label">Expense date</label>
+            <label className="label">{t('meals.expenseDate')}</label>
             <input type="date" className="field" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
           <Button className="w-full" disabled={!amount || !items.trim() || busy} loading={busy} onClick={submit}>
-            <Plus className="h-4 w-4" /> Add expense
+            <Plus className="h-4 w-4" /> {t('meals.addExpense')}
           </Button>
           <p className="text-[10px] leading-relaxed text-ink-400">
-            Only approved bazar counts toward the meal rate. Managers can approve from the list.
+            {t('meals.bazarNote')}
           </p>
         </div>
       </div>
@@ -256,11 +265,11 @@ function BazarTab() {
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="card p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Approved bazar</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.approvedBazar')}</p>
             <p className="mt-1 text-lg font-extrabold tabular-nums text-ink-900">{money(approved, symbol)}</p>
           </div>
           <div className="card p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Awaiting approval</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.awaitingApproval')}</p>
             <p className="mt-1 text-lg font-extrabold tabular-nums text-amber-600">{money(pending, symbol)}</p>
           </div>
         </div>
@@ -268,13 +277,13 @@ function BazarTab() {
         <div className="card divide-y divide-ink-100">
           {entries.length === 0 ? (
             <div className="p-4">
-              <EmptyState icon={<Wallet className="h-4 w-4" />} title="No bazar yet" body="Add your first expense to start the meal rate." />
+              <EmptyState icon={<Wallet className="h-4 w-4" />} title={t('meals.noBazar')} body={t('meals.noBazarBody')} />
             </div>
           ) : (
             entries.map((entry) => (
               <div key={entry.id} className="flex items-start justify-between gap-3 p-3.5">
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-ink-900">{entry.items_summary || 'Bazar expense'}</p>
+                  <p className="text-xs font-bold text-ink-900">{entry.items_summary || t('meals.bazarExpense')}</p>
                   <p className="mt-0.5 text-[11px] text-ink-500">
                     {nameOf(entry.buyer_id)} · {shortDate(entry.expense_date)}
                   </p>
@@ -282,12 +291,14 @@ function BazarTab() {
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(Number(entry.amount), symbol)}</p>
                   <div className="flex items-center gap-1.5">
-                    <Pill tone={entry.status === 'approved' ? 'success' : 'warn'}>{entry.status}</Pill>
+                    <Pill tone={entry.status === 'approved' ? 'success' : 'warn'}>
+                      {entry.status === 'approved' ? t('meals.statusApproved') : t('meals.statusPending')}
+                    </Pill>
                     {entry.status === 'pending' && canManage ? (
                       <button
                         onClick={() => run(() => backend.setBazarStatus(entry.id, 'approved'), 'Expense approved')}
                         className="rounded-md bg-emerald-50 p-1 text-emerald-600 hover:bg-emerald-100"
-                        title="Approve"
+                        title={t('meals.approve')}
                       >
                         <Check className="h-3.5 w-3.5" />
                       </button>
@@ -296,7 +307,7 @@ function BazarTab() {
                       <button
                         onClick={() => run(() => backend.deleteBazar(entry.id), 'Expense removed')}
                         className="rounded-md p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
-                        title="Delete"
+                        title={t('meals.delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -314,6 +325,7 @@ function BazarTab() {
 
 function UtilitiesTab() {
   const { ws, user, settlement, cycle, backend, run, busy } = useApp()
+  const { t } = useI18n()
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
 
@@ -337,15 +349,23 @@ function UtilitiesTab() {
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
       <div className="card h-fit p-4">
-        <SectionHeading title="Add fixed utility" hint={`Split equally between ${settlement.memberCount} members`} />
+        <SectionHeading
+          title={t('meals.addUtility')}
+          hint={t('meals.splitHint', { count: settlement.memberCount })}
+        />
         {canManage ? (
           <div className="space-y-3">
             <div>
-              <label className="label">Title</label>
-              <input className="field" placeholder="Cook / Maid, Gas, Wi-Fi…" value={title} onChange={(event) => setTitle(event.target.value)} />
+              <label className="label">{t('meals.utilityTitle')}</label>
+              <input
+                className="field"
+                placeholder={t('meals.utilityPlaceholder')}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
             </div>
             <div>
-              <label className="label">Total amount ({symbol})</label>
+              <label className="label">{t('meals.totalAmount', { symbol })}</label>
               <input
                 type="number"
                 min="0"
@@ -357,12 +377,12 @@ function UtilitiesTab() {
               />
             </div>
             <Button className="w-full" disabled={!title.trim() || !amount || busy} loading={busy} onClick={add}>
-              <Plus className="h-4 w-4" /> Add utility
+              <Plus className="h-4 w-4" /> {t('meals.addUtilityBtn')}
             </Button>
           </div>
         ) : (
           <p className="rounded-xl bg-ink-50 px-3 py-3 text-xs text-ink-500">
-            Only admins and managers can change fixed utilities. Ask them to add cook, gas or internet bills.
+            {t('meals.utilityLocked')}
           </p>
         )}
       </div>
@@ -370,11 +390,11 @@ function UtilitiesTab() {
       <div className="space-y-3">
         <div className="card flex items-center justify-between p-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Total utilities</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.totalUtilities')}</p>
             <p className="text-lg font-extrabold tabular-nums text-ink-900">{money(total, symbol)}</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">Per member</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.perMember')}</p>
             <p className="text-lg font-extrabold tabular-nums text-brand-700">{money(settlement.utilityShare, symbol)}</p>
           </div>
         </div>
@@ -382,14 +402,16 @@ function UtilitiesTab() {
         <div className="card divide-y divide-ink-100">
           {entries.length === 0 ? (
             <div className="p-4">
-              <EmptyState icon={<CircleCheck className="h-4 w-4" />} title="No fixed utilities yet" />
+              <EmptyState icon={<CircleCheck className="h-4 w-4" />} title={t('meals.noUtilities')} />
             </div>
           ) : (
             entries.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 p-3.5">
                 <div>
                   <p className="text-xs font-bold text-ink-900">{entry.title}</p>
-                  <p className="text-[11px] text-ink-500">Split {entry.split_type} · {settlement.memberCount} members</p>
+                  <p className="text-[11px] text-ink-500">
+                    {t('meals.splitLine', { type: entry.split_type, count: settlement.memberCount })}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(Number(entry.total_amount), symbol)}</p>
@@ -397,7 +419,7 @@ function UtilitiesTab() {
                     <button
                       onClick={() => run(() => backend.deleteUtility(entry.id), 'Utility removed')}
                       className="rounded-md p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
-                      title="Delete"
+                      title={t('meals.delete')}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -414,6 +436,7 @@ function UtilitiesTab() {
 
 function DepositsTab() {
   const { ws, user, cycle, backend, run, busy } = useApp()
+  const { t } = useI18n()
   const [userId, setUserId] = useState(user?.id ?? '')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(todayISO())
@@ -440,7 +463,7 @@ function DepositsTab() {
     if (!value || value <= 0 || !userId) return
     if (file && file.size > MAX_PROOF_BYTES) {
       await run(async () => {
-        throw new Error('That receipt is larger than 2 MB. Please attach a smaller screenshot.')
+        throw new Error(t('meals.tooLarge'))
       })
       return
     }
@@ -468,7 +491,7 @@ function DepositsTab() {
   const openProof = (path: string) => {
     run(async () => {
       const url = await backend.depositProofUrl(path)
-      if (!url) throw new Error('That receipt can no longer be opened.')
+      if (!url) throw new Error(t('meals.proofGone'))
       window.open(url, '_blank', 'noopener,noreferrer')
     })
   }
@@ -476,21 +499,24 @@ function DepositsTab() {
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
       <div className="card h-fit p-4">
-        <SectionHeading title="Record deposit" hint={`${money(total, symbol)} collected this cycle`} />
+        <SectionHeading
+          title={t('meals.recordDeposit')}
+          hint={t('meals.collected', { amount: money(total, symbol) })}
+        />
         <div className="space-y-3">
           <div>
-            <label className="label">Member</label>
+            <label className="label">{t('dash.member')}</label>
             <select className="field" value={userId} onChange={(event) => setUserId(event.target.value)} disabled={!canManage}>
               {members.map((member) => (
                 <option key={member.user_id} value={member.user_id}>
-                  {member.profile.full_name} {member.user_id === user.id ? '(you)' : ''}
+                  {member.profile.full_name} {member.user_id === user.id ? t('dash.you') : ''}
                 </option>
               ))}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="label">Amount</label>
+              <label className="label">{t('meals.amount', { symbol })}</label>
               <input
                 type="number"
                 min="0"
@@ -502,13 +528,13 @@ function DepositsTab() {
               />
             </div>
             <div>
-              <label className="label">Date</label>
+              <label className="label">{t('meals.date')}</label>
               <input type="date" className="field" value={date} onChange={(event) => setDate(event.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="label">Method</label>
+              <label className="label">{t('meals.method')}</label>
               <select className="field" value={method} onChange={(event) => setMethod(event.target.value as DepositMethod)}>
                 {depositMethods.map((entry) => (
                   <option key={entry.id} value={entry.id}>
@@ -518,20 +544,20 @@ function DepositsTab() {
               </select>
             </div>
             <div>
-              <label className="label">Txn reference</label>
+              <label className="label">{t('meals.reference')}</label>
               <input
                 className="field"
-                placeholder={method === 'cash' ? 'Optional' : 'TrxID'}
+                placeholder={method === 'cash' ? t('meals.optional') : t('meals.trxid')}
                 value={reference}
                 onChange={(event) => setReference(event.target.value)}
               />
             </div>
           </div>
           <div>
-            <label className="label">Receipt (optional)</label>
+            <label className="label">{t('meals.receiptOptional')}</label>
             <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-ink-200 bg-ink-50/60 px-3 py-2 text-[11px] font-semibold text-ink-500 hover:border-brand-300">
               <Paperclip className="h-3.5 w-3.5" />
-              <span className="truncate">{file ? file.name : 'Attach a screenshot or PDF'}</span>
+              <span className="truncate">{file ? file.name : t('meals.attach')}</span>
               <input
                 key={fileKey}
                 type="file"
@@ -542,12 +568,17 @@ function DepositsTab() {
             </label>
           </div>
           <div>
-            <label className="label">Note</label>
-            <input className="field" placeholder="Paid to the manager" value={note} onChange={(event) => setNote(event.target.value)} />
+            <label className="label">{t('meals.note')}</label>
+            <input
+              className="field"
+              placeholder={t('meals.notePlaceholder')}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
           </div>
           {locked ? (
             <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-[11px] font-medium text-amber-800">
-              This cycle is closed, so deposits are read-only. Reopen the cycle or start a new month to record more.
+              {t('meals.depositsClosed')}
             </p>
           ) : null}
           <Button
@@ -556,7 +587,7 @@ function DepositsTab() {
             loading={busy}
             onClick={add}
           >
-            <Plus className="h-4 w-4" /> Add deposit
+            <Plus className="h-4 w-4" /> {t('meals.addDeposit')}
           </Button>
         </div>
       </div>
@@ -564,7 +595,7 @@ function DepositsTab() {
       <div className="card divide-y divide-ink-100">
         {entries.length === 0 ? (
           <div className="p-4">
-            <EmptyState icon={<Wallet className="h-4 w-4" />} title="No deposits yet" body="Record cash or bKash deposits here." />
+            <EmptyState icon={<Wallet className="h-4 w-4" />} title={t('meals.noDeposits')} body={t('meals.noDepositsBody')} />
           </div>
         ) : (
           entries.map((entry) => (
@@ -581,7 +612,7 @@ function DepositsTab() {
                     onClick={() => openProof(entry.proof_path as string)}
                     className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 hover:bg-brand-100"
                   >
-                    <Paperclip className="h-3 w-3" /> Receipt
+                    <Paperclip className="h-3 w-3" /> {t('meals.receipt')}
                   </button>
                 ) : null}
               </div>
@@ -591,7 +622,7 @@ function DepositsTab() {
                   <button
                     onClick={() => run(() => backend.deleteDeposit(entry.id), 'Deposit removed')}
                     className="rounded-md p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
-                    title="Delete"
+                    title={t('meals.delete')}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

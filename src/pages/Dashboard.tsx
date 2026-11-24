@@ -14,13 +14,16 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { BannerAdSlot, useMonetization } from '../components/Monetization'
+import { ReminderCenter } from '../components/ReminderCenter'
 import { Avatar, Button, Pill, SectionHeading } from '../components/ui'
 import { addDays, money, monthTitle, relativeDay, todayISO } from '../lib/format'
+import { useI18n, type MessageKey } from '../lib/i18n'
 import type { BazarDuty } from '../lib/types'
 
 export function Dashboard() {
   const { ws, user, settlement, cycle, cycleId, setCycleId, busy } = useApp()
   const { isPro, openUpgrade } = useMonetization()
+  const { t } = useI18n()
 
   if (!ws || !user || !settlement || !cycle) return null
 
@@ -76,10 +79,10 @@ export function Dashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-400">
-            {cycle.status === 'open' ? 'Live cycle' : 'Archived cycle'}
+            {cycle.status === 'open' ? t('dash.liveCycle') : t('dash.archivedCycle')}
           </p>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">
-            Assalamu alaikum, {firstName} <span className="animate-float inline-block">👋</span>
+            {t('dash.greeting', { name: firstName })} <span className="animate-float inline-block">👋</span>
           </h1>
           <p className="mt-1 text-sm text-ink-500">
             {ws.mess.name} · {monthTitle(cycle.month_label)} · {ws.mess.invite_code}
@@ -111,7 +114,7 @@ export function Dashboard() {
             to="/settlement"
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-3.5 py-2.5 text-xs font-bold text-white transition hover:bg-brand-700"
           >
-            Settlement <ArrowUpRight className="h-3.5 w-3.5" />
+            {t('dash.settlement')} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       </div>
@@ -122,20 +125,20 @@ export function Dashboard() {
           <div className="relative flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-brand-100/80">
-                <UtensilsCrossed className="h-3.5 w-3.5" /> Current meal rate
+                <UtensilsCrossed className="h-3.5 w-3.5" /> {t('dash.mealRate')}
               </p>
               <p className="mt-2 text-4xl font-extrabold tabular-nums tracking-tight">
                 {money(settlement.mealRate, symbol)}
               </p>
-              <p className="mt-1 text-[11px] text-brand-50/70">per meal · approved bazar ÷ total meals</p>
+              <p className="mt-1 text-[11px] text-brand-50/70">{t('dash.perMeal')}</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide">
-                {cycle.status === 'open' ? '● Live' : 'Closed'}
+                {cycle.status === 'open' ? t('dash.live') : t('dash.closed')}
               </span>
               {ws.mess.is_pro_mess ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-300/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-200">
-                  <Crown className="h-3 w-3" /> Pro
+                  <Crown className="h-3 w-3" /> {t('dash.pro')}
                 </span>
               ) : null}
             </div>
@@ -143,23 +146,23 @@ export function Dashboard() {
 
           <div className="relative mt-5 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">Meals</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.meals')}</p>
               <p className="text-sm font-extrabold tabular-nums">{settlement.totalMeals.toFixed(1)}</p>
             </div>
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">Bazar</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.bazar')}</p>
               <p className="text-sm font-extrabold tabular-nums">{money(settlement.totalBazar, symbol)}</p>
             </div>
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">Pending</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.pending')}</p>
               <p className="text-sm font-extrabold tabular-nums">{money(settlement.pendingBazar, symbol)}</p>
             </div>
           </div>
 
           <div className="relative mt-4">
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-brand-50/80">
-              <span>Deposits collected {money(settlement.totalDeposits, symbol)}</span>
-              <span>vs bazar {money(settlement.totalBazar, symbol)}</span>
+              <span>{t('dash.depositsCollected', { amount: money(settlement.totalDeposits, symbol) })}</span>
+              <span>{t('dash.vsBazar', { amount: money(settlement.totalBazar, symbol) })}</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-white/15">
               <div
@@ -168,7 +171,9 @@ export function Dashboard() {
               />
             </div>
             <p className="mt-1.5 text-[10px] text-brand-100/60">
-              {progressPct >= 100 ? 'Fully funded — settle up at month end.' : `${Math.round(progressPct)}% of bazar funded by deposits.`}
+              {progressPct >= 100
+                ? t('dash.fullyFunded')
+                : t('dash.percentFunded', { percent: Math.round(progressPct) })}
             </p>
           </div>
         </div>
@@ -176,7 +181,7 @@ export function Dashboard() {
         <div className={`card flex flex-col justify-between p-5 ${me && me.balance < 0 ? 'ring-1 ring-rose-100' : ''}`}>
           <div>
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-400">My net balance</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-400">{t('dash.myNetBalance')}</p>
               <Wallet className="h-4 w-4 text-ink-300" />
             </div>
             <p className={`mt-2 text-3xl font-extrabold tabular-nums ${me && me.balance < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
@@ -184,37 +189,41 @@ export function Dashboard() {
             </p>
             <div className="mt-1">
               {me && me.balance > 0.5 ? (
-                <Pill tone="success">Refundable — collect at settlement</Pill>
+                <Pill tone="success">{t('dash.refundable')}</Pill>
               ) : me && me.balance < -0.5 ? (
-                <Pill tone="danger">Due — please deposit</Pill>
+                <Pill tone="danger">{t('dash.dueDeposit')}</Pill>
               ) : (
-                <Pill tone="neutral">All settled</Pill>
+                <Pill tone="neutral">{t('dash.allSettled')}</Pill>
               )}
             </div>
 
             <dl className="mt-4 space-y-1.5 text-xs">
               <div className="flex justify-between">
-                <dt className="text-ink-500">My deposits</dt>
+                <dt className="text-ink-500">{t('dash.myDeposits')}</dt>
                 <dd className="font-bold tabular-nums text-ink-800">{money(me?.deposits ?? 0, symbol)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-500">Meal cost ({me?.meals.toFixed(1)} meals)</dt>
+                <dt className="text-ink-500">
+                  {t('dash.mealCost', { meals: me?.meals.toFixed(1) ?? '0' })}
+                </dt>
                 <dd className="font-bold tabular-nums text-ink-800">{money(me?.mealCost ?? 0, symbol)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-500">Utility share</dt>
+                <dt className="text-ink-500">{t('dash.utilityShare')}</dt>
                 <dd className="font-bold tabular-nums text-ink-800">{money(me?.utilityShare ?? 0, symbol)}</dd>
               </div>
               {me && Math.abs(me.carriedBalance) > 0.005 ? (
                 <div className="flex justify-between">
-                  <dt className="text-ink-500">{me.carriedBalance < 0 ? 'Carried dues' : 'Carried credit'}</dt>
+                  <dt className="text-ink-500">
+                    {me.carriedBalance < 0 ? t('dash.carriedDues') : t('dash.carriedCredit')}
+                  </dt>
                   <dd className={`font-bold tabular-nums ${me.carriedBalance < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                     {money(me.carriedBalance, symbol)}
                   </dd>
                 </div>
               ) : null}
               <div className="flex justify-between border-t border-dashed border-ink-100 pt-1.5">
-                <dt className="font-semibold text-ink-600">Total payable</dt>
+                <dt className="font-semibold text-ink-600">{t('dash.totalPayable')}</dt>
                 <dd className="font-extrabold tabular-nums text-ink-900">{money(me?.payable ?? 0, symbol)}</dd>
               </div>
             </dl>
@@ -223,29 +232,33 @@ export function Dashboard() {
             to="/meals"
             className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-ink-900 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-ink-800"
           >
-            <UtensilsCrossed className="h-3.5 w-3.5" /> Log meals & bazar
+            <UtensilsCrossed className="h-3.5 w-3.5" /> {t('dash.logMeals')}
           </Link>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { icon: Users, label: 'Active members', value: String(settlement.memberCount), tone: 'text-brand-600 bg-brand-50' },
-          { icon: UtensilsCrossed, label: 'Total meals', value: settlement.totalMeals.toFixed(1), tone: 'text-flame-600 bg-flame-50' },
-          { icon: Wallet, label: 'Utility share', value: money(settlement.utilityShare, symbol), tone: 'text-indigo-600 bg-indigo-50' },
-          { icon: ShoppingBasket, label: 'Bazar paid by me', value: money(me?.bazarPaid ?? 0, symbol), tone: 'text-emerald-600 bg-emerald-50' },
+          { icon: Users, label: 'dash.activeMembers', value: String(settlement.memberCount), tone: 'text-brand-600 bg-brand-50' },
+          { icon: UtensilsCrossed, label: 'dash.totalMeals', value: settlement.totalMeals.toFixed(1), tone: 'text-flame-600 bg-flame-50' },
+          { icon: Wallet, label: 'dash.utilityShareLabel', value: money(settlement.utilityShare, symbol), tone: 'text-indigo-600 bg-indigo-50' },
+          { icon: ShoppingBasket, label: 'dash.bazarPaidByMe', value: money(me?.bazarPaid ?? 0, symbol), tone: 'text-emerald-600 bg-emerald-50' },
         ].map((stat) => (
           <div key={stat.label} className="card flex items-center gap-3 p-3.5">
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${stat.tone}`}>
               <stat.icon className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-ink-400">{stat.label}</p>
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-ink-400">
+                {t(stat.label as MessageKey)}
+              </p>
               <p className="truncate text-sm font-extrabold tabular-nums text-ink-900">{stat.value}</p>
             </div>
           </div>
         ))}
       </div>
+
+      <ReminderCenter />
 
       {dutyToday.length || announcements.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -258,14 +271,15 @@ export function Dashboard() {
                   </span>
                   <div>
                     <p className="text-sm font-extrabold text-amber-900">
-                      You're on bazar duty {relativeDay(dutyToday[0].scheduled_date).toLowerCase()}
+                      {t('dash.onDuty', { when: relativeDay(dutyToday[0].scheduled_date).toLowerCase() })}
                     </p>
                     <p className="text-[11px] font-semibold text-amber-700">
-                      {dutyToday[0].shopping_list.length} items · {dutyToday[0].market_route_notes || 'No route notes'}
+                      {t('dash.items', { count: dutyToday[0].shopping_list.length })} ·{' '}
+                      {dutyToday[0].market_route_notes || t('dash.noRoute')}
                     </p>
                   </div>
                 </div>
-                <Pill tone="warn">Duty</Pill>
+                <Pill tone="warn">{t('dash.duty')}</Pill>
               </div>
               <ul className="mt-3 flex flex-wrap gap-1.5">
                 {dutyToday[0].shopping_list.map((item) => (
@@ -276,13 +290,13 @@ export function Dashboard() {
               </ul>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="gold" onClick={() => nudge(dutyToday[0])}>
-                  <MessageCircle className="h-3.5 w-3.5" /> Nudge via WhatsApp
+                  <MessageCircle className="h-3.5 w-3.5" /> {t('dash.nudge')}
                 </Button>
                 <Link
                   to="/hub"
                   className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-bold text-amber-800 transition hover:bg-amber-50"
                 >
-                  View roster
+                  {t('dash.viewRoster')}
                 </Link>
               </div>
             </div>
@@ -295,8 +309,8 @@ export function Dashboard() {
                   <Megaphone className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-sm font-extrabold text-ink-900">Admin noticeboard</p>
-                  <p className="text-[11px] text-ink-400">Pinned announcements for the mess</p>
+                  <p className="text-sm font-extrabold text-ink-900">{t('dash.noticeboard')}</p>
+                  <p className="text-[11px] text-ink-400">{t('dash.pinned')}</p>
                 </div>
               </div>
               <ul className="mt-3 space-y-2">
@@ -316,11 +330,14 @@ export function Dashboard() {
 
       <div>
         <SectionHeading
-          title="Member breakdown"
-          hint={`${monthTitle(cycle.month_label)} · rate ${money(settlement.mealRate, symbol)}/meal`}
+          title={t('dash.memberBreakdown')}
+          hint={t('dash.rateHint', {
+            month: monthTitle(cycle.month_label),
+            rate: money(settlement.mealRate, symbol),
+          })}
           action={
             <Link to="/settlement" className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 hover:text-brand-800">
-              <CalendarDays className="h-3.5 w-3.5" /> Month-end settlement
+              <CalendarDays className="h-3.5 w-3.5" /> {t('dash.monthEnd')}
             </Link>
           }
         />
@@ -329,13 +346,13 @@ export function Dashboard() {
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-ink-100 bg-ink-50/60">
-                  <th className="px-4 py-3 text-left table-head">Member</th>
-                  <th className="px-3 py-3 text-right table-head">Meals</th>
-                  <th className="px-3 py-3 text-right table-head">Bazar paid</th>
-                  <th className="px-3 py-3 text-right table-head">Deposits</th>
-                  <th className="px-3 py-3 text-right table-head">Payable</th>
-                  <th className="px-3 py-3 text-right table-head">Balance</th>
-                  {canManage ? <th className="px-3 py-3 text-right table-head">Remind</th> : null}
+                  <th className="px-4 py-3 text-left table-head">{t('dash.member')}</th>
+                  <th className="px-3 py-3 text-right table-head">{t('dash.meals')}</th>
+                  <th className="px-3 py-3 text-right table-head">{t('dash.bazarPaid')}</th>
+                  <th className="px-3 py-3 text-right table-head">{t('dash.deposits')}</th>
+                  <th className="px-3 py-3 text-right table-head">{t('dash.payable')}</th>
+                  <th className="px-3 py-3 text-right table-head">{t('dash.balance')}</th>
+                  {canManage ? <th className="px-3 py-3 text-right table-head">{t('dash.remind')}</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
@@ -346,9 +363,11 @@ export function Dashboard() {
                         <Avatar name={member.name} url={avatarOf(member.userId)} frame={member.frame} size="sm" />
                         <div>
                           <p className="text-xs font-bold text-ink-900">
-                            {member.name} {member.userId === user.id ? <span className="text-brand-600">(you)</span> : null}
+                            {member.name} {member.userId === user.id ? <span className="text-brand-600">{t('dash.you')}</span> : null}
                           </p>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{member.role}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                            {t(`role.${member.role}` as MessageKey)}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -377,7 +396,7 @@ export function Dashboard() {
                             disabled={busy}
                             className="inline-flex items-center gap-1 rounded-lg border border-ink-200 px-2 py-1 text-[10px] font-bold text-ink-600 transition hover:border-brand-300 hover:text-brand-700"
                           >
-                            <BellRing className="h-3 w-3" /> Send
+                            <BellRing className="h-3 w-3" /> {t('dash.send')}
                           </button>
                         ) : (
                           <span className="text-[10px] font-semibold text-ink-300">—</span>
@@ -389,7 +408,7 @@ export function Dashboard() {
               </tbody>
               <tfoot>
                 <tr className="border-t border-ink-100 bg-ink-50/60 text-xs font-extrabold text-ink-800">
-                  <td className="px-4 py-3">Total</td>
+                  <td className="px-4 py-3">{t('dash.total')}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{settlement.totalMeals.toFixed(1)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{money(settlement.totalBazar, symbol)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{money(settlement.totalDeposits, symbol)}</td>
@@ -405,10 +424,11 @@ export function Dashboard() {
 
       <div className="flex items-center justify-between rounded-xl border border-ink-100 bg-white px-4 py-3">
         <p className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-500">
-          <Trophy className="h-3.5 w-3.5 text-amber-500" /> Guild rank · {ws.mess.guild_points.toLocaleString()} points
+          <Trophy className="h-3.5 w-3.5 text-amber-500" />{' '}
+          {t('dash.guildRank', { points: ws.mess.guild_points.toLocaleString() })}
         </p>
         <Link to="/arena" className="text-[11px] font-bold text-brand-700 hover:text-brand-800">
-          Open Arena →
+          {t('dash.openArena')}
         </Link>
       </div>
 
@@ -416,10 +436,10 @@ export function Dashboard() {
       <p className="pb-1 text-center text-[10px] text-ink-300">
         {ws.mess.is_pro_mess ? (
           <>
-            <Crown className="mr-1 inline h-3 w-3 text-amber-500" /> Pro mess — ad-free for all members
+            <Crown className="mr-1 inline h-3 w-3 text-amber-500" /> {t('dash.proAdFree')}
           </>
         ) : (
-          'Mess Mates · Free tier keeps queries lean and storage capped'
+          t('dash.freeTier')
         )}
       </p>
     </div>

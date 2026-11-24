@@ -8,6 +8,7 @@ import type {
   MealField,
   Poll,
   Profile,
+  Role,
   SplitType,
   Workspace,
 } from './types'
@@ -75,6 +76,12 @@ export interface Backend {
   joinMess(code: string): Promise<void>
   updateProfile(patch: Partial<Pick<Profile, 'full_name' | 'avatar_frame'>>): Promise<void>
   updateMess(patch: Partial<{ name: string; currency_symbol: string; guild_banner: string; guild_emblem: string; meal_lock_hour: number }>): Promise<void>
+  /** Admin only: promote, demote or keep a mate as a plain member. */
+  updateMemberRole(memberId: string, role: Role): Promise<void>
+  /** Marks the membership as left; their history stays for past settlements. */
+  removeMember(memberId: string): Promise<void>
+  /** Removes your own active membership so you land back on create/join. */
+  leaveMess(): Promise<void>
   setMeal(input: MealInput): Promise<void>
   addBazar(input: BazarInput): Promise<void>
   setBazarStatus(id: string, status: BazarExpense['status']): Promise<void>

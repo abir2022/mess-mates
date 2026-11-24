@@ -21,6 +21,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Bengali renders taller than Latin, so give it a matching font stack and
+   a little extra leading instead of letting the script clip. */
+html[lang='bn'] body {
+  font-family: 'Hind Siliguri', 'Noto Sans Bengali', 'SolaimanLipi', ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.7;
+}
+
 @layer components {
   .card {
     @apply rounded-2xl border border-ink-100 bg-white shadow-card;
@@ -57,12 +64,29 @@ body {
   background: rgba(22, 163, 148, 0.22);
 }
 
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
 @media print {
+  html,
+  body,
+  #root {
+    height: auto;
+  }
   body {
     background: #fff;
+    font-size: 10pt;
   }
   .no-print {
     display: none !important;
+  }
+  /* The statement is printed from inside the app shell, so the shell has to
+     stop reserving space for a hidden sidebar and bottom bar. */
+  main {
+    max-width: none !important;
+    padding: 0 !important;
   }
   .print-full {
     margin: 0 !important;
@@ -73,5 +97,34 @@ body {
     box-shadow: none !important;
     border-color: #dbe4e9 !important;
     break-inside: avoid;
+  }
+  /* A wide table is clipped by its scroll container on screen; on paper it
+     has to shrink to the page instead of being cut off. */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+  table {
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 7.5pt !important;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tr,
+  img {
+    break-inside: avoid;
+  }
+  th,
+  td {
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+  }
+  a[href]::after {
+    content: '';
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

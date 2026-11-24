@@ -4,6 +4,7 @@ import {
   Check,
   Clock,
   Crown,
+  Download,
   Megaphone,
   MessageSquare,
   Plus,
@@ -18,28 +19,31 @@ import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
 import { Avatar, Button, CopyButton, EmptyState, Modal, Pill, SectionHeading, Tabs } from '../components/ui'
 import { resetDemoData } from '../lib/demo'
+import { useI18n } from '../lib/i18n'
 import { addDays, monthOptions, monthTitle, relativeDay, shortDate, timeAgo, todayISO } from '../lib/format'
-import type { BazarDuty } from '../lib/types'
+import { downloadSettlementCsv, downloadWorkspace } from '../lib/export'
+import type { BazarDuty, MessMember, Role } from '../lib/types'
 
 type HubTab = 'board' | 'roster' | 'settings'
 
 export function Hub() {
   const [tab, setTab] = useState<HubTab>('board')
+  const { t } = useI18n()
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">Mess Hub</h1>
-        <p className="mt-1 text-sm text-ink-500">Noticeboard, bazar roster and mess settings.</p>
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.hub')}</h1>
+        <p className="mt-1 text-sm text-ink-500">{t('hub.subtitle')}</p>
       </div>
 
       <Tabs
         value={tab}
         onChange={setTab}
         tabs={[
-          { id: 'board', label: 'Noticeboard', icon: <MessageSquare className="h-3.5 w-3.5" /> },
-          { id: 'roster', label: 'Bazar roster', icon: <ShoppingBasket className="h-3.5 w-3.5" /> },
-          { id: 'settings', label: 'Settings', icon: <Settings2 className="h-3.5 w-3.5" /> },
+          { id: 'board', label: t('hub.tabBoard'), icon: <MessageSquare className="h-3.5 w-3.5" /> },
+          { id: 'roster', label: t('hub.tabRoster'), icon: <ShoppingBasket className="h-3.5 w-3.5" /> },
+          { id: 'settings', label: t('hub.tabSettings'), icon: <Settings2 className="h-3.5 w-3.5" /> },
         ]}
       />
 
@@ -52,6 +56,7 @@ export function Hub() {
 
 function BoardTab() {
   const { ws, user, backend, run, busy } = useApp()
+  const { t } = useI18n()
   const [content, setContent] = useState('')
   const [announcement, setAnnouncement] = useState(false)
 
@@ -76,17 +81,17 @@ function BoardTab() {
       <div className="card flex min-h-[520px] flex-col overflow-hidden">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
           <div>
-            <p className="text-sm font-extrabold text-ink-900">Mess noticeboard</p>
-            <p className="text-[11px] text-ink-400">{messages.length} of 100 messages kept</p>
+            <p className="text-sm font-extrabold text-ink-900">{t('hub.boardTitle')}</p>
+            <p className="text-[11px] text-ink-400">{t('hub.kept', { count: messages.length })}</p>
           </div>
           <Pill tone="brand">
-            <MessageSquare className="h-3 w-3" /> Group chat
+            <MessageSquare className="h-3 w-3" /> {t('hub.groupChat')}
           </Pill>
         </div>
 
         <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3" style={{ maxHeight: '58vh' }}>
           {messages.length === 0 ? (
-            <EmptyState icon={<MessageSquare className="h-4 w-4" />} title="Say hello" body="Start the thread with a quick note for the mess." />
+            <EmptyState icon={<MessageSquare className="h-4 w-4" />} title={t('hub.sayHello')} body={t('hub.sayHelloBody')} />
           ) : (
             messages.map((message) => {
               const member = memberOf(message.user_id)
@@ -114,7 +119,7 @@ function BoardTab() {
                     >
                       {message.is_announcement ? (
                         <p className="mb-1 flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wide text-amber-700">
-                          <Megaphone className="h-3 w-3" /> Announcement
+                          <Megaphone className="h-3 w-3" /> {t('hub.announcement')}
                         </p>
                       ) : null}
                       {message.content}
@@ -131,7 +136,7 @@ function BoardTab() {
             <textarea
               value={content}
               onChange={(event) => setContent(event.target.value)}
-              placeholder="Write to the mess…"
+              placeholder={t('hub.write')}
               className="field min-h-[46px] flex-1 resize-none py-2.5"
               rows={1}
               onKeyDown={(event) => {
@@ -153,19 +158,19 @@ function BoardTab() {
                   announcement ? 'bg-amber-100 text-amber-800' : 'bg-ink-100 text-ink-500 hover:bg-ink-200'
                 }`}
               >
-                <Megaphone className="h-3 w-3" /> {announcement ? 'Pinned as announcement' : 'Pin announcement'}
+                <Megaphone className="h-3 w-3" /> {announcement ? t('hub.pinned') : t('hub.pin')}
               </button>
             ) : (
-              <span className="text-[10px] text-ink-400">Managers can pin announcements</span>
+              <span className="text-[10px] text-ink-400">{t('hub.managersPin')}</span>
             )}
-            <span className="text-[10px] text-ink-300">Enter to send · Shift+Enter for a new line</span>
+            <span className="text-[10px] text-ink-300">{t('hub.enterHint')}</span>
           </div>
         </div>
       </div>
 
       <div className="space-y-3">
         <div className="card p-4">
-          <SectionHeading title="Announcements" hint="Pinned to the dashboard" />
+          <SectionHeading title={t('hub.announcements')} hint={t('hub.announcementsHint')} />
           <div className="space-y-2">
             {ws.messages
               .filter((message) => message.is_announcement)
@@ -180,18 +185,16 @@ function BoardTab() {
                 </div>
               ))}
             {ws.messages.filter((message) => message.is_announcement).length === 0 ? (
-              <p className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] text-ink-500">No announcements yet.</p>
+              <p className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] text-ink-500">{t('hub.noAnnouncements')}</p>
             ) : null}
           </div>
         </div>
 
         <div className="card p-4">
           <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink-700">
-            <ShieldCheck className="h-3.5 w-3.5 text-brand-600" /> Free-tier safe
+            <ShieldCheck className="h-3.5 w-3.5 text-brand-600" /> {t('hub.freeTierSafe')}
           </p>
-          <p className="mt-1 text-[11px] leading-relaxed text-ink-500">
-            A Postgres trigger deletes anything older than the latest 100 messages per mess, so storage stays flat.
-          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-ink-500">{t('hub.freeTierBody')}</p>
         </div>
       </div>
     </div>
@@ -200,6 +203,7 @@ function BoardTab() {
 
 function RosterTab() {
   const { ws, user, backend, run, busy } = useApp()
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [assigned, setAssigned] = useState(user?.id ?? '')
   const [date, setDate] = useState(addDays(todayISO(), 2))
@@ -254,17 +258,17 @@ function RosterTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionHeading title="Rotating bazar duty" hint="Assign turns, share the shopping list, nudge on WhatsApp" />
+        <SectionHeading title={t('hub.rosterTitle')} hint={t('hub.rosterHint')} />
         {canManage ? (
           <Button size="sm" onClick={() => setOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> Assign duty
+            <Plus className="h-3.5 w-3.5" /> {t('hub.assignDuty')}
           </Button>
         ) : null}
       </div>
 
       {upcoming.length === 0 ? (
         <div className="card p-6">
-          <EmptyState icon={<ShoppingBasket className="h-4 w-4" />} title="No duty scheduled" body="Managers can assign the next bazar turn." />
+          <EmptyState icon={<ShoppingBasket className="h-4 w-4" />} title={t('hub.noDuty')} body={t('hub.noDutyBody')} />
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -281,7 +285,7 @@ function RosterTab() {
                     </div>
                     <div>
                       <p className="text-xs font-extrabold text-ink-900">
-                        {nameOf(duty.assigned_user_id)} {isMine ? <span className="text-amber-700">(you)</span> : null}
+                        {nameOf(duty.assigned_user_id)} {isMine ? <span className="text-amber-700">{t('dash.you')}</span> : null}
                       </p>
                       <p className="text-[10px] font-semibold text-ink-400">{relativeDay(duty.scheduled_date)} · {weekdayLabel(duty.scheduled_date)}</p>
                     </div>
@@ -309,7 +313,7 @@ function RosterTab() {
 
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   <Button size="sm" variant="gold" onClick={() => nudge(duty)}>
-                    <MessageSquare className="h-3 w-3" /> Nudge
+                    <MessageSquare className="h-3 w-3" /> {t('hub.nudge')}
                   </Button>
                   {canManage || isMine ? (
                     <>
@@ -319,7 +323,7 @@ function RosterTab() {
                         disabled={busy}
                         onClick={() => run(() => backend.updateDuty(duty.id, { status: 'completed' }), 'Bazar duty completed — guild points noted')}
                       >
-                        <Check className="h-3 w-3" /> Done
+                        <Check className="h-3 w-3" /> {t('hub.done')}
                       </Button>
                       <Button
                         size="sm"
@@ -327,7 +331,7 @@ function RosterTab() {
                         disabled={busy}
                         onClick={() => run(() => backend.updateDuty(duty.id, { status: 'missed' }), 'Marked as missed')}
                       >
-                        <X className="h-3 w-3" /> Missed
+                        <X className="h-3 w-3" /> {t('hub.missed')}
                       </Button>
                     </>
                   ) : null}
@@ -335,7 +339,7 @@ function RosterTab() {
                     <button
                       onClick={() => run(() => backend.deleteDuty(duty.id), 'Duty removed')}
                       className="ml-auto rounded-md p-1 text-ink-300 hover:bg-rose-50 hover:text-rose-500"
-                      title="Delete duty"
+                      title={t('hub.deleteDuty')}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -348,10 +352,10 @@ function RosterTab() {
       )}
 
       <div>
-        <SectionHeading title="Duty history" />
+        <SectionHeading title={t('hub.dutyHistory')} />
         <div className="card divide-y divide-ink-100">
           {history.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-ink-400">Nothing completed yet.</p>
+            <p className="px-4 py-3 text-xs text-ink-400">{t('hub.nothingCompleted')}</p>
           ) : (
             history.map((duty) => (
               <div key={duty.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
@@ -369,22 +373,22 @@ function RosterTab() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Assign bazar duty"
-        subtitle="The assigned mate sees a banner on their dashboard"
+        title={t('hub.assignTitle')}
+        subtitle={t('hub.assignSub')}
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" className="flex-1" onClick={() => setOpen(false)}>
-              Cancel
+              {t('hub.cancel')}
             </Button>
             <Button className="flex-1" onClick={addDuty} loading={busy}>
-              Schedule duty
+              {t('hub.schedule')}
             </Button>
           </div>
         }
       >
         <div className="space-y-3">
           <div>
-            <label className="label">Assigned mate</label>
+            <label className="label">{t('hub.assignedMate')}</label>
             <select className="field" value={assigned} onChange={(event) => setAssigned(event.target.value)}>
               {members.map((member) => (
                 <option key={member.user_id} value={member.user_id}>
@@ -394,23 +398,23 @@ function RosterTab() {
             </select>
           </div>
           <div>
-            <label className="label">Date</label>
+            <label className="label">{t('hub.date')}</label>
             <input type="date" className="field" value={date} min={todayISO()} onChange={(event) => setDate(event.target.value)} />
           </div>
           <div>
-            <label className="label">Market / route notes</label>
+            <label className="label">{t('hub.routeNotes')}</label>
             <input
               className="field"
-              placeholder="New Market — Gate 2, ask for Rahim Bhai"
+              placeholder={t('hub.routePlaceholder')}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
             />
           </div>
           <div>
-            <label className="label">Shopping checklist (comma separated)</label>
+            <label className="label">{t('hub.checklist')}</label>
             <textarea
               className="field min-h-[70px] resize-none"
-              placeholder="Rice 10kg, Chicken 3kg, Vegetables, Eggs"
+              placeholder={t('hub.checklistPlaceholder')}
               value={items}
               onChange={(event) => setItems(event.target.value)}
             />
@@ -426,19 +430,23 @@ function weekdayLabel(iso: string): string {
 }
 
 function SettingsTab() {
-  const { ws, user, cycle, backend, run, busy, signOut, setCycleId } = useApp()
+  const { ws, user, cycle, settlement, backend, run, busy, signOut, setCycleId } = useApp()
   const { isPro, openUpgrade } = useMonetization()
+  const { t } = useI18n()
   const [name, setName] = useState(ws?.mess.name ?? '')
   const [currency, setCurrency] = useState(ws?.mess.currency_symbol ?? '৳')
   const [lockHour, setLockHour] = useState(String(ws?.mess.meal_lock_hour ?? 22))
   const [displayName, setDisplayName] = useState(user?.full_name ?? '')
   const [nextMonth, setNextMonth] = useState(monthOptions(4)[1]?.label ?? '')
+  const [removing, setRemoving] = useState<MessMember | null>(null)
+  const [leaving, setLeaving] = useState(false)
   const monthChoices = monthOptions(4)
 
   if (!ws || !user) return null
 
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
+  const isAdmin = myRole === 'admin'
 
   const saveMess = () =>
     run(
@@ -459,15 +467,15 @@ function SettingsTab() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="card p-4">
-        <SectionHeading title="Mess profile" hint={canManage ? 'Admins and managers can edit' : 'Read only for members'} />
+        <SectionHeading title={t('hub.messProfile')} hint={canManage ? t('hub.canEdit') : t('hub.readOnly')} />
         <div className="space-y-3">
           <div>
-            <label className="label">Mess name</label>
+            <label className="label">{t('hub.messName')}</label>
             <input className="field" value={name} onChange={(event) => setName(event.target.value)} disabled={!canManage} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="label">Currency</label>
+              <label className="label">{t('hub.currency')}</label>
               <select className="field" value={currency} onChange={(event) => setCurrency(event.target.value)} disabled={!canManage}>
                 {['৳', '₹', '$', 'Rs'].map((symbol) => (
                   <option key={symbol} value={symbol}>
@@ -477,7 +485,7 @@ function SettingsTab() {
               </select>
             </div>
             <div>
-              <label className="label">Meal lock hour</label>
+              <label className="label">{t('hub.lockHour')}</label>
               <input
                 type="number"
                 min="0"
@@ -490,25 +498,25 @@ function SettingsTab() {
             </div>
           </div>
           <Button className="w-full" disabled={!canManage || busy} loading={busy} onClick={saveMess}>
-            Save mess settings
+            {t('hub.saveMess')}
           </Button>
 
           <div className="flex items-center justify-between rounded-xl bg-brand-50 px-3 py-2.5">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-brand-700">Invite code</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-brand-700">{t('hub.inviteCode')}</p>
               <p className="font-mono text-lg font-extrabold tracking-[0.25em] text-brand-900">{ws.mess.invite_code}</p>
             </div>
-            <CopyButton value={ws.mess.invite_code} label="Copy code" />
+            <CopyButton value={ws.mess.invite_code} label={t('hub.copyCode')} />
           </div>
         </div>
       </div>
 
       <div className="card p-4">
-        <SectionHeading title="Your profile" hint={`${user.xp_points} XP earned`} />
+        <SectionHeading title={t('hub.yourProfile')} hint={t('hub.xpEarned', { xp: user.xp_points })} />
         <div className="flex items-center gap-3">
           <Avatar name={user.full_name} url={user.avatar_url} frame={user.avatar_frame} size="lg" />
           <div className="flex-1">
-            <label className="label">Display name</label>
+            <label className="label">{t('hub.displayName')}</label>
             <input className="field" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
           </div>
         </div>
@@ -518,24 +526,59 @@ function SettingsTab() {
           disabled={displayName.trim().length < 2 || busy}
           onClick={() => run(() => backend.updateProfile({ full_name: displayName.trim() }), 'Profile updated')}
         >
-          Save profile
+          {t('hub.saveProfile')}
         </Button>
 
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">Members ({ws.members.filter((m) => m.status === 'active').length})</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-400">
+            {t('hub.members', { count: ws.members.filter((m) => m.status === 'active').length })}
+          </p>
+          {isAdmin ? <p className="mb-2 text-[10px] text-ink-400">{t('hub.membersHint')}</p> : null}
           <div className="divide-y divide-ink-100 rounded-xl border border-ink-100">
             {ws.members
               .filter((member) => member.status === 'active')
               .map((member) => (
-                <div key={member.id} className="flex items-center gap-2.5 px-3 py-2">
+                <div key={member.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                   <Avatar name={member.profile.full_name} url={member.profile.avatar_url} frame={member.profile.avatar_frame} size="xs" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-bold text-ink-800">
-                      {member.profile.full_name} {member.user_id === user.id ? <span className="text-brand-600">(you)</span> : null}
+                      {member.profile.full_name}{' '}
+                      {member.user_id === user.id ? <span className="text-brand-600">{t('dash.you')}</span> : null}
                     </p>
                     <p className="text-[10px] text-ink-400">{member.profile.email || member.profile.xp_points + ' XP'}</p>
                   </div>
-                  <Pill tone={member.role === 'admin' ? 'gold' : member.role === 'manager' ? 'brand' : 'neutral'}>{member.role}</Pill>
+                  {isAdmin && member.user_id !== user.id ? (
+                    <>
+                      <select
+                        aria-label={t('hub.role')}
+                        className="rounded-lg border border-ink-200 bg-white px-1.5 py-1 text-[10px] font-bold text-ink-700"
+                        value={member.role}
+                        disabled={busy}
+                        onChange={(event) => {
+                          const next = event.target.value as Role
+                          void run(
+                            () => backend.updateMemberRole(member.id, next),
+                            `${member.profile.full_name} is now ${next}`,
+                          )
+                        }}
+                      >
+                        <option value="admin">{t('role.admin')}</option>
+                        <option value="manager">{t('role.manager')}</option>
+                        <option value="member">{t('role.member')}</option>
+                      </select>
+                      <button
+                        onClick={() => setRemoving(member)}
+                        title={t('hub.removeMember')}
+                        className="rounded-md p-1 text-ink-300 transition hover:bg-rose-50 hover:text-rose-500"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <Pill tone={member.role === 'admin' ? 'gold' : member.role === 'manager' ? 'brand' : 'neutral'}>
+                      {t(`role.${member.role}`)}
+                    </Pill>
+                  )}
                 </div>
               ))}
           </div>
@@ -543,26 +586,26 @@ function SettingsTab() {
       </div>
 
       <div className="card p-4">
-        <SectionHeading title="Monthly cycles" hint="Close the month before starting the next one" />
+        <SectionHeading title={t('hub.cycles')} hint={t('hub.cyclesHint')} />
         <div className="space-y-2">
           {ws.cycles.map((entry) => (
             <div key={entry.id} className="flex items-center justify-between gap-2 rounded-xl border border-ink-100 px-3 py-2">
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-3.5 w-3.5 text-ink-400" />
                 <span className="text-xs font-bold text-ink-800">{monthTitle(entry.month_label)}</span>
-                {entry.id === cycle?.id ? <Pill tone="brand">Viewing</Pill> : null}
+                {entry.id === cycle?.id ? <Pill tone="brand">{t('hub.viewing')}</Pill> : null}
               </div>
               <div className="flex items-center gap-1.5">
                 <Pill tone={entry.status === 'open' ? 'success' : 'neutral'}>{entry.status}</Pill>
                 <button onClick={() => setCycleId(entry.id)} className="rounded-md px-1.5 py-1 text-[10px] font-bold text-brand-700 hover:bg-brand-50">
-                  View
+                  {t('hub.view')}
                 </button>
                 {canManage && entry.status === 'open' ? (
                   <button
                     onClick={() => run(() => backend.setCycleStatus(entry.id, 'closed'), 'Cycle closed')}
                     className="rounded-md px-1.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50"
                   >
-                    Close
+                    {t('hub.close')}
                   </button>
                 ) : null}
               </div>
@@ -580,13 +623,12 @@ function SettingsTab() {
               ))}
             </select>
             <Button onClick={startCycle} loading={busy}>
-              <Clock className="h-4 w-4" /> Start
+              <Clock className="h-4 w-4" /> {t('hub.start')}
             </Button>
           </div>
         ) : null}
         <p className="mt-2 text-[10px] leading-relaxed text-ink-400">
-          Starting a new month opens a fresh cycle and closes the others. Previous months stay readable from the
-          dashboard switcher.
+          {t('hub.cyclesNote')}
         </p>
       </div>
 
@@ -595,29 +637,54 @@ function SettingsTab() {
           <div className="card overflow-hidden">
             <div className="bg-gradient-to-br from-ink-900 to-brand-800 p-4 text-white">
               <p className="flex items-center gap-1.5 text-sm font-extrabold">
-                <Crown className="h-4 w-4 text-amber-300" /> Mess Mates Pro
+                <Crown className="h-4 w-4 text-amber-300" /> {t('hub.proTitle')}
               </p>
-              <p className="mt-1 text-[11px] text-white/70">
-                Ad-free for every mate, premium guild frames, unlimited archives and automated reminders.
-              </p>
+              <p className="mt-1 text-[11px] text-white/70">{t('hub.proBody')}</p>
             </div>
             <div className="p-3">
               <Button className="w-full" variant="gold" onClick={openUpgrade}>
-                <Crown className="h-4 w-4" /> Upgrade this mess
+                <Crown className="h-4 w-4" /> {t('hub.upgradeMess')}
               </Button>
             </div>
           </div>
         ) : (
           <div className="card flex items-center gap-2 p-4">
             <Crown className="h-4 w-4 text-amber-500" />
-            <p className="text-xs font-bold text-ink-800">Pro mess active — ads are off for everyone.</p>
+            <p className="text-xs font-bold text-ink-800">{t('hub.proActive')}</p>
           </div>
         )}
 
         <div className="card p-4">
-          <SectionHeading title="Account" />
+          <SectionHeading title={t('hub.dataPrivacy')} hint={t('hub.dataPrivacyHint')} />
+          <div className="space-y-2">
+            <Button variant="secondary" className="w-full" onClick={() => downloadWorkspace(ws)}>
+              <Download className="h-4 w-4" /> {t('hub.exportJson')}
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={!cycle || !settlement}
+              onClick={() => {
+                if (cycle && settlement) downloadSettlementCsv(ws, cycle, settlement)
+              }}
+            >
+              <Download className="h-4 w-4" /> {t('hub.exportCsv')}
+            </Button>
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-ink-400">{t('hub.exportHint')}</p>
+          <button
+            onClick={() => setLeaving(true)}
+            className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-200 px-3 py-2 text-[10px] font-bold text-ink-400 transition hover:border-rose-200 hover:text-rose-500"
+          >
+            <Trash2 className="h-3 w-3" /> {t('hub.leaveMess')}
+          </button>
+          <p className="mt-2 text-[10px] leading-relaxed text-ink-300">{t('hub.accountDeleteNote')}</p>
+        </div>
+
+        <div className="card p-4">
+          <SectionHeading title={t('hub.account')} />
           <Button variant="secondary" className="w-full" onClick={signOut} loading={busy}>
-            Sign out
+            {t('common.signOut')}
           </Button>
           {backend.mode === 'demo' ? (
             <button
@@ -627,14 +694,69 @@ function SettingsTab() {
               }}
               className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-ink-200 px-3 py-2 text-[10px] font-bold text-ink-400 hover:border-rose-200 hover:text-rose-500"
             >
-              <Trash2 className="h-3 w-3" /> Reset demo data
+              <Trash2 className="h-3 w-3" /> {t('hub.resetDemo')}
             </button>
           ) : null}
           <p className="mt-3 flex items-center gap-1 text-[10px] text-ink-400">
-            <ShieldCheck className="h-3 w-3" /> {backend.mode === 'demo' ? 'Demo mode · data stays in this browser' : 'Secured with Supabase Row-Level Security'}
+            <ShieldCheck className="h-3 w-3" />{' '}
+            {backend.mode === 'demo' ? t('hub.demoFooter') : t('hub.liveFooter')}
           </p>
         </div>
       </div>
+
+      <Modal
+        open={Boolean(removing)}
+        onClose={() => setRemoving(null)}
+        title={t('hub.removeTitle', { name: removing?.profile.full_name ?? '' })}
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setRemoving(null)}>
+              {t('hub.cancel')}
+            </Button>
+            <Button
+              className="flex-1"
+              loading={busy}
+              onClick={async () => {
+                if (!removing) return
+                const ok = await run(
+                  () => backend.removeMember(removing.id),
+                  `${removing.profile.full_name} was removed from the mess`,
+                )
+                if (ok) setRemoving(null)
+              }}
+            >
+              {t('hub.remove')}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-xs leading-relaxed text-ink-500">{t('hub.removeBody')}</p>
+      </Modal>
+
+      <Modal
+        open={leaving}
+        onClose={() => setLeaving(false)}
+        title={t('hub.leaveTitle', { name: ws.mess.name })}
+        footer={
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" onClick={() => setLeaving(false)}>
+              {t('hub.cancel')}
+            </Button>
+            <Button
+              className="flex-1"
+              loading={busy}
+              onClick={async () => {
+                const ok = await run(() => backend.leaveMess(), 'You left the mess')
+                if (ok) setLeaving(false)
+              }}
+            >
+              {t('hub.leave')}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-xs leading-relaxed text-ink-500">{t('hub.leaveBody')}</p>
+      </Modal>
     </div>
   )
 }
