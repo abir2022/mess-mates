@@ -300,12 +300,15 @@ function GamesTab() {
       }, 'Challenge room created — invite a rival mess')
     })
 
-  const finishDice = (results: { name: string; score: number }[]) => {
+  const finishDice = (results: { name: string; score: number }[], winnerUserId: string | null) => {
     run(async () => {
       const room = await backend.createGame('dice', { scores: results, rounds: 3 })
-      await backend.updateGame(room.id, { status: 'finished', winnerUserId: user.id })
-      await backend.awardGame(room.id)
-    }, '🏆 Dice Duel win — +25 guild points, +10 XP')
+      await backend.updateGame(room.id, { status: 'finished', winnerUserId })
+      // award_game_win credits the caller's XP, so it may only run for the device
+      // owner's own win; a mate's win on this device is recorded under their name
+      // and earns the caller nothing.
+      if (winnerUserId === user.id) await backend.awardGame(room.id)
+    }, winnerUserId === user.id ? '🏆 Dice Duel win — +25 guild points, +10 XP' : 'Duel result saved')
   }
 
   return (

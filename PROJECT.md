@@ -580,12 +580,12 @@ Business model in the code:
 1. **Migration 004 not applied to the live database (blocker for the newest features).** Role changes, member removal and self-leave will error until the SQL is run. User action required.
 2. ~~**No CI.**~~ **Fixed** — `.github/workflows/ci.yml` runs install → typecheck → tests → build on every push to `main` and every pull request (see §20).
 3. ~~**Monetization is not production-safe.**~~ **Client hole closed** — the free `upgradePro()` path is gone and migration `006_pro_entitlement.sql` blocks client writes to both Pro flags (§22). Still open: there is no billing provider and no subscription state, so activation stays manual.
-4. **Free archive limit is cosmetic.** The two-cycle cap is a Dashboard dropdown gate; Supabase still returns every cycle, so a modified client can read all history.
+4. **Free archive limit is cosmetic.** The two-cycle cap is a Dashboard dropdown gate; Supabase still returns every cycle, so a modified client can read all history. **Do not "fix" this by trimming the fetch:** `carriedBalances()` in `src/lib/calc.ts` walks every earlier cycle to build the carry-forward chain, so dropping old cycles from the payload silently zeroes real money in the current month's settlement. A real cap has to keep the chain readable (an RLS rule on the cycle tables plus a server-side aggregate for the carry) and needs a product decision about what a downgraded mess keeps.
 5. **Removal is not a ban.** A removed member can rejoin with the invite code (`join_mess` re-activates).
 6. ~~**No realtime.**~~ **Fixed in code** — the app subscribes to Postgres changes for every workspace table and reloads on a debounce (see §21). Needs migration `005_realtime.sql` run once on the live project; until then it falls back to manual refresh.
 7. **Device reminders are foreground-only.** No Web Push/service-worker push, no scheduled server job; WhatsApp nudges open a prefilled chat and depend on the user pressing send.
 8. **i18n is incomplete** in PDF, toasts, Monetization, game instructions, ErrorBoundary, WhatsApp templates and date-relative labels (see §8.10).
-9. **Dice Duel records the caller as winner.** `finishDice` always sets `winnerUserId: user.id`, so a pass-and-play win by another member is attributed to the device owner. Also awards only once per room, so repeated duels create new rooms (fine) but the winner label can be wrong.
+9. ~~**Dice Duel records the caller as winner.**~~ **Fixed** — `DiceDuel` now reports the real highest scorer (`null` on a draw) and `finishDice` stores that id. `award_game_win` credits the *caller's* XP, so it now only runs when the device owner actually won; a mate's win is recorded under their name and earns the caller nothing. Remaining limitation: in that case the mess itself gains no guild points for the duel.
 10. **No server-side rate limits/abuse controls** on poll/message/game creation beyond RLS and character limits.
 11. **`guild_leaderboard` is global** and reveals every mess name/points to any authenticated user.
 12. **No account deletion flow.** Hub only shows a support note; GDPR/data-deletion needs an admin RPC or dashboard process.
@@ -844,4 +844,21 @@ shown in the modal is a placeholder, not a checkout.
 
 **Not verified:** the trigger has not been run against the live database (it needs the migration
 applied), and no attempt was made to call the API from outside the app to confirm the 42501. The
-modal itself was opened in the demo build and renders.
+modal itself was opened in the demo build and renders in both languages.
+
+---
+
+## 23. What is deliberately still open (24 Nov 2026)
+
+These came up in the audit and were left alone on purpose, with the reason. They need a decision or
+a credential, not a code edit:
+
+| # | Item | Why it is not a quick fix |
+|---|---|---|
+| 4 | Free 2-cycle archive cap | Trimming the fetched cycles breaks the carry-forward chain and changes settlements (§16.4). Needs an RLS rule plus a server-side carry aggregate, and a decision on what a downgraded mess keeps. |
+| 5 | Removal is not a ban | Needs a `removed` membership state and a `join_mess` check — a schema change with a data-migration question (what happens to a removed mate who is still owed money). |
+| 12 | No account deletion | Deleting a profile would orphan settled history that other members' balances depend on. Needs an agreed anonymise-vs-delete policy before any RPC. |
+| 14 | No error reporting / analytics | Needs a provider account and a DSN (or an equivalent self-hosted collector) — a decision plus a secret, not code. |
+| 8 | Remaining i18n gaps | PDF labels, toasts, ErrorBoundary copy, chess/dice instructions and WhatsApp templates are still hardcoded English. The Pro dialog was localised in this pass; the rest is a mechanical sweep best done in one commit. |
+
+The Pro tier also still has no billing provider: activation is manual (§22).

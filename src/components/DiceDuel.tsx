@@ -6,7 +6,13 @@ import { Avatar, Button, Pill } from './ui'
 const diceFaces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 const ROUNDS = 3
 
-export function DiceDuel({ onComplete }: { onComplete: (results: { name: string; score: number }[]) => void }) {
+export function DiceDuel({
+  onComplete,
+}: {
+  /** `winnerUserId` is null on a draw, and is the real player rather than the
+   *  device owner — the duel is pass-and-play, so the device is not the winner. */
+  onComplete: (results: { name: string; score: number }[], winnerUserId: string | null) => void
+}) {
   const { ws } = useApp()
   const activeMembers = ws?.members.filter((member) => member.status === 'active') ?? []
   const [playerIds, setPlayerIds] = useState<string[]>(activeMembers.slice(0, 2).map((member) => member.user_id))
@@ -57,7 +63,13 @@ export function DiceDuel({ onComplete }: { onComplete: (results: { name: string;
         setPhase('done')
         if (!reported.current) {
           reported.current = true
-          onComplete(playerIds.map((id) => ({ name: nameOf(id), score: nextScores[id] ?? 0 })))
+          const rankedIds = [...playerIds].sort((x, y) => (nextScores[y] ?? 0) - (nextScores[x] ?? 0))
+          const draw =
+            rankedIds.length > 1 && (nextScores[rankedIds[0]] ?? 0) === (nextScores[rankedIds[1]] ?? 0)
+          onComplete(
+            playerIds.map((id) => ({ name: nameOf(id), score: nextScores[id] ?? 0 })),
+            draw ? null : rankedIds[0],
+          )
         }
       } else {
         setTurn((turn + 1) % playerIds.length)
