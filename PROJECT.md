@@ -764,8 +764,9 @@ verified against locally. The job needs no secrets — the app builds into demo 
 Local dry run of the exact sequence (all four steps exit 0): install reported "no changes" from the
 frozen lockfile, typecheck clean, 31 tests pass, build succeeds with the known jsPDF chunk warning.
 
-**Not verified:** the workflow has not executed on GitHub yet — the first run after the next push is
-what confirms the runner image, the Bun install and the cache behaviour.
+**Verified on GitHub:** the first run (id `45336650549`, commit `d4207f9`, push to `main`) finished
+**success in 19 s** — checkout, Bun install from the frozen lockfile, typecheck, 31 tests and the
+build all passed on `ubuntu-latest`.
 
 ---
 
