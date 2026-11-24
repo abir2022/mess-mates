@@ -578,7 +578,7 @@ Business model in the code:
 ### Open issues, ranked
 
 1. **Migration 004 not applied to the live database (blocker for the newest features).** Role changes, member removal and self-leave will error until the SQL is run. User action required.
-2. **No CI.** Add a GitHub Actions workflow running `npm ci`/`bun install`, typecheck, tests and build on PRs.
+2. ~~**No CI.**~~ **Fixed** — `.github/workflows/ci.yml` runs install → typecheck → tests → build on every push to `main` and every pull request (see §20).
 3. **Monetization is not production-safe.** `upgradePro()` is callable by any manager and grants Pro for free; no billing, no server-side entitlement.
 4. **Free archive limit is cosmetic.** The two-cycle cap is a Dashboard dropdown gate; Supabase still returns every cycle, so a modified client can read all history.
 5. **Removal is not a ban.** A removed member can rejoin with the invite code (`join_mess` re-activates).
@@ -634,7 +634,7 @@ Business model in the code:
 - [ ] Put `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env`; never commit them.
 - [ ] Decide repo visibility and rotate any credential that may have been shared in chat.
 - [ ] Read `src/lib/backend.ts`, `src/lib/calc.ts`, `src/context/AppContext.tsx` first; then the four tabs of `MealsBazar` and `Hub`.
-- [ ] Add CI (typecheck + tests + build) before the next feature.
+- [x] CI runs install → typecheck → tests → build on every push and PR (`.github/workflows/ci.yml`, §20).
 - [ ] Before charging money: integrate a real billing provider and move Pro entitlement server-side.
 - [ ] Before growing: add Realtime and push notifications, then address the open issues in §16.
 
@@ -733,3 +733,35 @@ shows it), clipped 10 px stat labels on the dashboard stat cards (now wrap to tw
 **Still not verified:** no Lighthouse or axe run, no screen-reader pass, and no check with a real
 Supabase session (only the seeded demo workspace). Hover/focus states were not exercised with a
 keyboard.
+
+To review the UI without an account, start a second dev server with the Supabase variables emptied —
+`getBackend()` in `src/lib/backend.ts` then falls back to the seeded demo workspace:
+
+```bash
+VITE_SUPABASE_URL= VITE_SUPABASE_PUBLISHABLE_KEY= npx vite --port 5274
+```
+
+---
+
+## 20. Continuous integration (24 Nov 2026)
+
+`.github/workflows/ci.yml` is the only workflow. It runs on every push to `main` and every pull
+request, with a 10-minute timeout and `cancel-in-progress` per ref.
+
+| Step | Command |
+|---|---|
+| Install | `bun install --frozen-lockfile` |
+| Typecheck | `bun run typecheck` (`tsc --noEmit`) |
+| Test | `bun test` |
+| Build | `bun run build` (`tsc --noEmit && vite build`) |
+
+Why Bun and not npm: the repo is locked with `bun.lock` and there is no `package-lock.json`, and the
+test suite is Bun's runner. `oven-sh/setup-bun` is pinned to **1.4.0**, the version every command was
+verified against locally. The job needs no secrets — the app builds into demo mode without
+`VITE_SUPABASE_URL`, so CI never touches Supabase or Vercel.
+
+Local dry run of the exact sequence (all four steps exit 0): install reported "no changes" from the
+frozen lockfile, typecheck clean, 31 tests pass, build succeeds with the known jsPDF chunk warning.
+
+**Not verified:** the workflow has not executed on GitHub yet — the first run after the next push is
+what confirms the runner image, the Bun install and the cache behaviour.
