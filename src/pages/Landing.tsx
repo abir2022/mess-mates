@@ -248,7 +248,7 @@ export function LandingPage() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => document.getElementById(item.id)?.scrollIntoView({ block: 'start' })}
                 className="hover:text-brand-700"
               >
                 {item.label}
