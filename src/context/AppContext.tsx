@@ -1,14 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getBackend, type Backend } from '../lib/backend'
 import { computeSettlement, type Settlement } from '../lib/calc'
+import { t } from '../lib/i18n'
 import { outbox } from '../lib/outbox'
-import type { MonthlyCycle, Profile, Workspace } from '../lib/types'
+import type { CycleTotals, DailyMeal, LiveChange, MessMessage, MonthlyCycle, Profile, Workspace } from '../lib/types'
 
 interface AppContextValue {
   backend: Backend
   user: Profile | null
   ws: Workspace | null
   settlement: Settlement | null
+  /** Server-side totals for the cycle; falls back to the client calculation. */
+  totals: CycleTotals | null
   cycle: MonthlyCycle | null
   cycleId: string | null
   ready: boolean
@@ -28,7 +31,7 @@ interface AppContextValue {
   signInDemo: () => Promise<void>
   signOut: () => Promise<void>
   createMess: (name: string, currency: string) => Promise<boolean>
-  joinMess: (code: string) => Promise<boolean>
+  joinMess: (code: string) => Promise<'joined' | 'requested' | null>
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -46,6 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [cycleId, setCycleId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [totals, setTotals] = useState<CycleTotals | null>(null)
 
   const refresh = useCallback(async () => {
     const profile = await backend.currentUser()
@@ -56,7 +60,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return
     }
     const next = await backend.loadWorkspace()
-    setWs(next)
+    // A workspace cached by an older build predates settlements and join requests.
+    setWs(
+      next
+        ? { ...next, settlements: next.settlements ?? [], joinRequests: next.joinRequests ?? [] }
+        : null,
+    )
     if (next) {
       setCycleId((current) => {
         if (current && next.cycles.some((cycle) => cycle.id === current)) return current
@@ -78,22 +87,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer)
   }, [notice])
 
-  // Live updates: when a mate logs a meal, votes, writes in the board or moves a
-  // chess piece, the row change arrives here and the workspace reloads after a
-  // short debounce, so a burst of writes costs one fetch instead of many.
+  // Server totals for the headline cards. The client settlement is still the
+  // source for per-member maths; this only keeps the dashboard honest when a
+  // large mess would otherwise re-add every row in the browser.
+  useEffect(() => {
+    if (!cycleId) {
+      setTotals(null)
+      return
+    }
+    let cancelled = false
+    backend
+      .loadCycleTotals(cycleId)
+      .then((next) => {
+        if (cancelled) return
+        setTotals(next)
+      })
+      .catch(() => {
+        if (!cancelled) setTotals(null)
+      })
+    return () => {
+      cancelled = true
+    }
+    // Chat merges replace only `messages`, so the totals query does not run for
+    // every new message; a meal, bazar, utility or deposit change does.
+  }, [backend, cycleId, ws?.meals, ws?.bazar, ws?.utilities, ws?.deposits])
+
+  // Live updates: chat and meal rows are merged into the workspace as they
+  // arrive, so the noisiest events no longer refetch every table. Everything
+  // else (money, governance, games) still takes the debounced reload, and a
+  // hidden tab holds the reload until it is visible again.
   const userId = user?.id ?? null
   useEffect(() => {
     if (!userId) return
     let timer: ReturnType<typeof setTimeout> | null = null
-    const unsubscribe = backend.subscribe(() => {
+    let dirty = false
+
+    const reload = () => {
+      if (document.hidden) {
+        dirty = true
+        return
+      }
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
         refresh().catch(() => undefined)
       }, 600)
+    }
+
+    const merge = <T extends { id: string }>(rows: T[], change: LiveChange): T[] => {
+      const row = change.row as T | null
+      const id = row?.id ?? (change.oldRow?.id as string | undefined)
+      if (!id) return rows
+      if (change.eventType === 'DELETE') return rows.filter((entry) => entry.id !== id)
+      if (!row) return rows
+      return rows.some((entry) => entry.id === id)
+        ? rows.map((entry) => (entry.id === id ? { ...entry, ...row } : entry))
+        : [...rows, row]
+    }
+
+    const unsubscribe = backend.subscribe((change) => {
+      if (change.table === 'mess_messages') {
+        setWs((current) =>
+          current ? { ...current, messages: merge<MessMessage>(current.messages, change) } : current,
+        )
+        return
+      }
+      if (change.table === 'daily_meals') {
+        setWs((current) =>
+          current ? { ...current, meals: merge<DailyMeal>(current.meals, change) } : current,
+        )
+        return
+      }
+      reload()
     })
+
+    const onVisible = () => {
+      if (document.hidden || !dirty) return
+      dirty = false
+      refresh().catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
       unsubscribe()
     }
   }, [backend, refresh, userId])
@@ -222,10 +298,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const joinMess = useCallback(
     async (code: string) => {
-      const ok = await run(() => backend.joinMess(code), 'Welcome to the mess!')
-      return ok
+      setBusy(true)
+      setError(null)
+      try {
+        const result = await backend.joinMess(code)
+        await refresh()
+        setNotice(result === 'requested' ? t('auth.joinRequested') : 'Welcome to the mess!')
+        return result
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not join this mess.')
+        return null
+      } finally {
+        setBusy(false)
+      }
     },
-    [backend, run],
+    [backend, refresh],
   )
 
   const cycle = useMemo(
@@ -243,6 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     user,
     ws,
     settlement,
+    totals,
     cycle,
     cycleId,
     ready,

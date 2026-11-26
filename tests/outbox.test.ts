@@ -48,6 +48,8 @@ function workspace(): Workspace {
         role: 'admin',
         status: 'active',
         joined_at: '2026-11-01T00:00:00.000Z',
+        display_name: '',
+        avatar_url: null,
         profile: {
           id: 'me',
           full_name: 'Abir',
@@ -63,7 +65,15 @@ function workspace(): Workspace {
     cycles: [{ id: 'cycle', mess_id: 'mess', month_label: '2026-11', status: 'open' }],
     meals: [],
     bazar: [],
-    utilities: [],
+    utilities: [
+      {
+        id: 'util-1',
+        cycle_id: 'cycle',
+        title: 'Cook',
+        total_amount: 1200,
+        split_type: 'equal',
+      },
+    ],
     deposits: [],
     duty: [],
     polls: [],
@@ -71,6 +81,12 @@ function workspace(): Workspace {
     messages: [],
     games: [],
     leaderboard: [],
+    requests: [],
+    bans: [],
+    managerTerms: [],
+    depositRequests: [],
+    settlements: [],
+    joinRequests: [],
   }
 }
 
@@ -99,13 +115,27 @@ describe('offline outbox', () => {
 
   test('a fresh outbox instance reads the stored queue', () => {
     const storage = memoryStorage()
-    createOutbox(storage).queue({ kind: 'deleteBazar', id: 'b1' })
+    createOutbox(storage).queue({ kind: 'voidBazar', id: 'b1', reason: 'Entered twice' })
     const reopened = createOutbox(storage)
     expect(reopened.count()).toBe(1)
     const next = reopened.applyPending({ ...workspace(), bazar: [
-      { id: 'b1', cycle_id: 'cycle', buyer_id: 'me', amount: 10, items_summary: 'x', expense_date: '2026-11-01', status: 'approved' },
+      {
+        id: 'b1',
+        cycle_id: 'cycle',
+        buyer_id: 'me',
+        amount: 10,
+        items_summary: 'x',
+        expense_date: '2026-11-01',
+        status: 'approved',
+        voided_at: null,
+        voided_by: null,
+        void_reason: '',
+      },
     ] })
-    expect(next.bazar).toHaveLength(0)
+    // A voided entry is kept: the amount and the reason stay on the record.
+    expect(next.bazar).toHaveLength(1)
+    expect(next.bazar[0].void_reason).toBe('Entered twice')
+    expect(next.bazar[0].voided_at).toBeTruthy()
   })
 
   test('flush replays in order, clears sent changes and keeps the failures', async () => {
@@ -165,6 +195,22 @@ describe('offline outbox', () => {
     expect(box.cachedWorkspace()?.mess.name).toBe('Green House')
     box.clearCache()
     expect(box.cachedWorkspace()).toBeNull()
+  })
+
+  test('voided utilities and queued settlements replay offline', () => {
+    const box = createOutbox(memoryStorage())
+    box.queue({ kind: 'voidUtility', id: 'util-1', reason: 'Wrong bill' })
+    box.queue({
+      kind: 'requestSettlement',
+      input: { cycleId: 'cycle', amount: 500, date: '2026-11-25', note: 'bKash' },
+    })
+
+    const next = box.applyPending(workspace())
+    expect(next.utilities[0].void_reason).toBe('Wrong bill')
+    expect(next.utilities[0].voided_at).toBeTruthy()
+    expect(next.settlements).toHaveLength(1)
+    expect(next.settlements[0].status).toBe('pending')
+    expect(next.settlements[0].amount).toBe(500)
   })
 
   test('applyPending handles profile, mess, poll and duty changes', () => {

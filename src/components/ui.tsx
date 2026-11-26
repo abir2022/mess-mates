@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Check, Copy, Loader2, Minus, Plus, Share2, X } from 'lucide-react'
 import { frameRing } from '../lib/backend'
-import { initials } from '../lib/format'
+import { formatMeals, initials } from '../lib/format'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'gold'
 type Size = 'sm' | 'md' | 'lg'
@@ -81,7 +81,10 @@ export function Modal({
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef(onClose)
-  closeRef.current = onClose
+  // Keep the latest close handler without writing a ref during render.
+  useEffect(() => {
+    closeRef.current = onClose
+  }, [onClose])
 
   // Escape, body scroll lock and a focus trap. Opening moves focus into the
   // sheet; Tab cycles inside it; closing sends focus back to whatever opened
@@ -281,7 +284,7 @@ export function Stepper({
         <Minus className="h-4 w-4" />
       </button>
       <span className="w-8 text-center text-sm font-bold tabular-nums text-ink-800">
-        {Number.isInteger(value) ? value : value.toFixed(1)}
+        {formatMeals(value)}
       </span>
       <button
         type="button"

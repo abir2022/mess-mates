@@ -43,6 +43,191 @@ html[lang='bn'] body * {
   letter-spacing: normal;
 }
 
+/* ---- Dark theme -------------------------------------------------------
+   The palette lives in Tailwind, and most components use a small set of
+   surface/text/border utilities. Remapping those under .dark keeps every
+   screen consistent without rewriting each component with dark: variants.
+   Tinted alert surfaces (amber/rose/emerald) stay tinted, just darker. */
+html.dark {
+  color-scheme: dark;
+  --dark-surface: #0e2c3a;
+  --dark-body: #081c27;
+  --dark-sunken: #163b4c;
+  --dark-line: #1d4557;
+  --dark-line-strong: #285b70;
+}
+
+html.dark body {
+  background-color: var(--dark-body);
+  color: #e5edf1;
+}
+
+html.dark .card {
+  background-color: var(--dark-surface);
+  border-color: var(--dark-line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px -12px rgba(0, 0, 0, 0.9);
+}
+
+html.dark .field {
+  background-color: var(--dark-body);
+  border-color: var(--dark-line-strong);
+  color: #f4f7f9;
+}
+html.dark .field::placeholder {
+  color: #7695a8;
+}
+
+html.dark .label {
+  color: #a4bbc9;
+}
+
+html.dark .nav-link {
+  color: #93aebd;
+}
+html.dark .nav-link:hover {
+  background-color: rgba(22, 163, 148, 0.16);
+  color: #a6ecdb;
+}
+html.dark .nav-link-active {
+  background-color: rgba(22, 163, 148, 0.2);
+  color: #d1f7ec;
+  box-shadow: inset 0 0 0 1px rgba(112, 219, 198, 0.25);
+}
+html.dark .table-head {
+  color: #93aebd;
+}
+
+html.dark [class~='bg-white'] {
+  background-color: var(--dark-surface);
+}
+html.dark [class~='bg-white/95'] {
+  background-color: rgba(14, 44, 58, 0.95);
+}
+html.dark [class~='bg-white/90'] {
+  background-color: rgba(14, 44, 58, 0.9);
+}
+html.dark [class~='bg-white/80'] {
+  background-color: rgba(14, 44, 58, 0.8);
+}
+
+html.dark [class~='bg-ink-50'] {
+  background-color: var(--dark-body);
+}
+html.dark [class*='bg-ink-50/'] {
+  background-color: rgba(8, 28, 39, 0.65);
+}
+html.dark [class~='bg-ink-100'] {
+  background-color: var(--dark-sunken);
+}
+html.dark [class*='bg-ink-100/'] {
+  background-color: rgba(22, 59, 76, 0.7);
+}
+html.dark [class~='bg-ink-200'] {
+  background-color: #22536a;
+}
+
+html.dark [class~='text-ink-900'] {
+  color: #f4f7f9;
+}
+html.dark [class~='text-ink-800'] {
+  color: #e5edf1;
+}
+html.dark [class~='text-ink-700'] {
+  color: #cbdbe3;
+}
+html.dark [class~='text-ink-600'] {
+  color: #a4bbc9;
+}
+html.dark [class~='text-ink-500'] {
+  color: #93aebd;
+}
+html.dark [class~='text-ink-400'] {
+  color: #7695a8;
+}
+html.dark [class~='text-ink-300'] {
+  color: #5f7f92;
+}
+
+html.dark [class~='border-ink-100'] {
+  border-color: var(--dark-line);
+}
+html.dark [class~='border-ink-200'] {
+  border-color: var(--dark-line-strong);
+}
+html.dark [class~='border-ink-300'] {
+  border-color: #336b82;
+}
+html.dark .divide-ink-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--dark-line);
+}
+html.dark .ring-offset-2 {
+  --tw-ring-offset-color: var(--dark-surface);
+}
+
+html.dark [class~='bg-brand-50'] {
+  background-color: rgba(22, 163, 148, 0.16);
+}
+html.dark [class*='bg-brand-50/'] {
+  background-color: rgba(22, 163, 148, 0.1);
+}
+html.dark [class~='bg-brand-100'] {
+  background-color: rgba(22, 163, 148, 0.26);
+}
+html.dark [class~='text-brand-600'],
+html.dark [class~='text-brand-700'],
+html.dark [class~='text-brand-800'],
+html.dark [class~='text-brand-900'] {
+  color: #70dbc6;
+}
+
+html.dark [class~='bg-amber-50'] {
+  background-color: rgba(245, 158, 11, 0.14);
+}
+html.dark [class*='bg-amber-50/'] {
+  background-color: rgba(245, 158, 11, 0.1);
+}
+html.dark [class~='bg-amber-100'],
+html.dark [class~='bg-amber-200'] {
+  background-color: rgba(245, 158, 11, 0.22);
+}
+html.dark [class~='text-amber-600'],
+html.dark [class~='text-amber-700'],
+html.dark [class~='text-amber-800'],
+html.dark [class~='text-amber-900'] {
+  color: #fcd34d;
+}
+html.dark [class~='border-amber-100'],
+html.dark [class~='border-amber-200'] {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+html.dark [class~='bg-rose-50'] {
+  background-color: rgba(244, 63, 94, 0.14);
+}
+html.dark [class~='bg-rose-100'] {
+  background-color: rgba(244, 63, 94, 0.24);
+}
+html.dark [class~='text-rose-500'],
+html.dark [class~='text-rose-600'],
+html.dark [class~='text-rose-700'] {
+  color: #fda4af;
+}
+html.dark [class~='border-rose-200'] {
+  border-color: rgba(244, 63, 94, 0.35);
+}
+
+html.dark [class~='bg-emerald-50'] {
+  background-color: rgba(16, 185, 129, 0.14);
+}
+html.dark [class~='bg-emerald-100'] {
+  background-color: rgba(16, 185, 129, 0.24);
+}
+html.dark [class~='text-emerald-600'],
+html.dark [class~='text-emerald-700'],
+html.dark [class~='text-emerald-800'] {
+  color: #6ee7b7;
+}
+
 @layer components {
   .card {
     @apply rounded-2xl border border-ink-100 bg-white shadow-card;
@@ -215,5 +400,19 @@ html[lang='bn'] body * {
   * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  /* A statement printed from dark mode must still be black on white paper. */
+  html.dark body {
+    background: #fff !important;
+    color: #0f2b3d !important;
+  }
+  html.dark main [class] {
+    color: #0f2b3d !important;
+    border-color: #dbe4e9 !important;
+    background-color: transparent !important;
+  }
+  html.dark main .card {
+    background-color: #fff !important;
+    border-color: #dbe4e9 !important;
   }
 }

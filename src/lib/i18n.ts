@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 
 /**
  * Bangla / English text.
@@ -38,7 +38,7 @@ const en = {
   'layout.members': '{count} members · {role} access',
   'layout.noCycle': 'No cycle',
   'layout.goPro': 'Go Pro',
-  'layout.goProBody': 'Ad-free for every mate + premium guild frames.',
+  'layout.goProBody': 'Premium guild frames for every mate.',
   'layout.offline': 'Offline — showing saved data',
   'layout.offlineQueued': 'Offline — showing saved data · {count} queued',
   'layout.waitingSync': '{count} changes waiting to sync',
@@ -141,8 +141,6 @@ const en = {
   'dash.total': 'Total',
   'dash.guildRank': 'Guild rank · {points} points',
   'dash.openArena': 'Open Arena →',
-  'dash.proAdFree': 'Pro mess — ad-free for all members',
-  'dash.freeTier': 'Mess Mates · Free tier keeps queries lean and storage capped',
   'dash.rateHint': '{month} · rate {rate}/meal',
 
   'rem.title': 'Reminders',
@@ -163,6 +161,9 @@ const en = {
   'rem.approvalsBody': 'Pending bazar is left out of the meal rate until it is approved.',
   'rem.remindAll': 'Remind all dues',
   'rem.enableAlerts': 'Enable device alerts',
+  'rem.enabled': 'Device reminders on',
+  'rem.enabledBody':
+    'Mess Mates nudges you once a day when you open the app — meals before the cut-off, dues, duty and votes.',
   'rem.alertsOn': 'Device alerts on — one nudge a day while the app is open.',
   'rem.alertsBlocked': 'Device alerts blocked in browser settings.',
   'rem.alertsUnsupported': 'Device alerts are not supported here.',
@@ -195,6 +196,16 @@ const en = {
   'meals.copyPrevHint': 'Copies {date} for mates who have nothing logged yet.',
   'meals.copiedFrom': 'Copied {date} for {count} mates',
   'meals.week': 'Week at a glance',
+  'meals.standingTitle': 'My usual meals',
+  'meals.standingHint':
+    'Set what you normally eat — the app fills it in so you are never left out of the count.',
+  'meals.standingAutoOn': 'Auto-fill on',
+  'meals.standingAutoOff': 'Auto-fill off',
+  'meals.standingTurnOn': 'Fill my usual meals daily',
+  'meals.standingTurnOff': 'Stop filling automatically',
+  'meals.standingFill': 'Fill today',
+  'meals.standingFilled': 'Usual meals filled for today',
+  'meals.standingLocked': 'Meal cut-off has passed — ask a manager to edit this day.',
   'meals.bazarForm': 'Submit bazar expense',
   'meals.autoApproved': 'Auto-approved for managers',
   'meals.pendingApproval': 'Pending manager approval',
@@ -289,8 +300,8 @@ const en = {
   'arena.startDuel': 'Start duel',
   'arena.winXp': 'Win · +10 XP',
   'arena.challengeTitle': 'Mess-vs-Mess challenge room',
-  'arena.challengeBody': 'Unlock a custom challenge room with a rewarded ad — no forced interstitials.',
-  'arena.unlockChallenge': 'Unlock challenge',
+  'arena.challengeBody': 'Open a mess-vs-mess board and invite a rival mess — no unlock step.',
+  'arena.unlockChallenge': 'Start challenge',
   'arena.openRooms': 'Open rooms',
   'arena.openRoomsHint': 'Moves land live — open a room to play',
   'start.title': 'Get this mess running',
@@ -307,17 +318,22 @@ const en = {
   'settle.transfers': 'Who pays whom',
   'settle.transfersHint': '{count} payment(s) clear the month — no need to chase everyone.',
   'settle.noTransfers': 'Everyone is settled up — no payments needed.',
+  'settle.owedToMess': 'Members owe the mess {amount}',
+  'settle.owedToMessHint':
+    'Nobody has credit to receive it, so each member deposits their share into the mess fund instead.',
+  'settle.messOwesMembers': 'The mess owes members {amount}',
+  'settle.messOwesMembersHint':
+    'Deposits are ahead of spending — return the difference when the month is settled.',
+  'settle.settledNote': '{amount} of approved late payments is already counted in these balances.',
   'settle.copyPlan': 'Copy plan',
   'pro.title': 'Upgrade Mess to Pro',
-  'pro.subtitle': 'Unlock the full guild experience for every member.',
+  'pro.subtitle': 'Optional extras for the whole mess.',
   'pro.plan': 'Mess Mates Pro',
   'pro.price': '৳199 / month',
   'pro.lead': 'One subscription covers the whole mess. Activation is handled by the Mess Mates team while billing is still manual.',
-  'pro.feature1': 'Ad-free dashboard and arena for every member',
-  'pro.feature2': 'Custom guild banner upload + animated emblem presets',
-  'pro.feature3': 'Unlimited historical monthly archives',
-  'pro.feature4': 'Automated payment delay reminders',
-  'pro.feature5': 'Premium avatar frames included',
+  'pro.feature1': 'Premium avatar frames unlocked for every member',
+  'pro.feature2': 'Priority setup help from the team on WhatsApp',
+  'pro.feature3': 'Keeps Mess Mates online for your mess',
   'pro.contact': 'Request Pro activation',
   'pro.contactHint':
     'There is no card or bKash checkout inside the app yet. Message the number above on WhatsApp, pay the monthly fee directly, and the team will switch Pro on for this mess.',
@@ -343,11 +359,10 @@ const en = {
   'arena.guildBannerHint': 'Preset gradients — instant, no image upload needed',
   'arena.emblem': 'Emblem',
   'arena.avatarFrames': 'Avatar frames',
-  'arena.avatarFramesHint': 'Premium frames need a rewarded ad or Mess Pro',
+  'arena.avatarFramesHint': 'Premium frames unlock with Mess Pro',
   'arena.xp': '{xp} XP',
   'arena.premiumActive': 'premium frame active',
   'arena.standardFrames': 'standard frames',
-  'arena.ad': 'Ad',
   'arena.upgrade': 'Upgrade mess to Pro',
   'arena.proGuild': 'Pro guild — premium frames unlocked for everyone',
   'arena.leaderboard': 'Top mess leaderboard',
@@ -373,6 +388,7 @@ const en = {
   'settle.colUtility': 'Utility',
   'settle.colPayable': 'Payable',
   'settle.colDeposits': 'Deposits',
+  'settle.colSettled': 'Settled',
   'settle.colCarried': 'Carried',
   'settle.colBalance': 'Balance',
   'settle.totalDues': 'Total dues',
@@ -382,7 +398,7 @@ const en = {
   'settle.refundableBody': 'Return to members with a positive balance.',
   'settle.howTitle': 'How this is calculated',
   'settle.howBody':
-    'Meal rate = approved bazar ÷ total mess meals. Payable = member meals × meal rate + fixed utility share. Balance = deposits + balance carried from earlier months − payable. An unpaid due from a previous month carries forward automatically; an overpayment shows as credit. Pending bazar is excluded until a manager approves it.',
+    'Meal rate = approved bazar ÷ total mess meals. Payable = member meals × meal rate + fixed utility share. Balance = deposits + approved late payments + balance carried from earlier months − payable. An unpaid due from a previous month carries forward automatically; an overpayment shows as credit. Pending bazar is excluded until a manager approves it.',
   'settle.preparedBy': 'Prepared by (Manager)',
   'settle.approvedBy': 'Approved by (Admin)',
   'settle.generatedPro': 'Generated with Mess Mates Pro',
@@ -472,9 +488,9 @@ const en = {
   'hub.cyclesNote':
     'Starting a new month opens a fresh cycle and closes the others. Previous months stay readable from the dashboard switcher.',
   'hub.proTitle': 'Mess Mates Pro',
-  'hub.proBody': 'Ad-free for every mate, premium guild frames, unlimited archives and automated reminders.',
+  'hub.proBody': 'Premium guild frames for every mate, plus priority setup help from the team.',
   'hub.upgradeMess': 'Upgrade this mess',
-  'hub.proActive': 'Pro mess active — ads are off for everyone.',
+  'hub.proActive': 'Pro mess active — premium frames unlocked for every mate.',
   'hub.account': 'Account',
   'hub.resetDemo': 'Reset demo data',
   'hub.demoFooter': 'Demo mode · data stays in this browser',
@@ -577,9 +593,108 @@ const en = {
   'meals.cancelPayment': 'Cancel request',
   'meals.noPendingPayments': 'Nothing waiting for approval.',
   'meals.approvedByManager': 'Approved by the manager',
+  'ledger.tab': 'My ledger',
+  'ledger.title': 'Your ledger, every mess',
+  'ledger.hint':
+    'One account, separate books. Only you and the mess where they were entered can see these months.',
+  'ledger.empty': 'No months yet. Log meals or pay in a mess and they appear here.',
+  'ledger.month': 'Month',
+  'ledger.payable': 'should pay',
+  'ledger.paid': 'paid',
+  'ledger.settled': 'settled later',
+  'ledger.outstanding': 'Outstanding',
+  'ledger.owe': 'You owe {amount}',
+  'ledger.credit': 'Owes you {amount}',
+  'ledger.settle': 'Settle',
+  'ledger.settleTitle': 'Settle {mess}',
+  'ledger.settleHint':
+    'That month is closed, so its figures stay exactly as they are. Your payment is recorded beside it and the outstanding balance falls. The manager approves it, and the record keeps the amount, the date and who sent it.',
+  'ledger.amount': 'Amount ({symbol})',
+  'ledger.note': 'Note',
+  'ledger.send': 'Send to manager',
+  'ledger.requestSent': 'Sent. The manager has to approve it.',
+  'ledger.waiting': 'Waiting for the manager',
+  'ledger.pending': 'Pending',
+  'ledger.recent': 'Recently settled',
+  'ledger.approvedStatus': 'Approved',
+  'ledger.settlements': 'Late payments & refunds',
+  'ledger.settlementsHint':
+    'Money that moved after the month closed. The month itself never changes, so nobody can quietly rewrite a settled figure.',
+  'ledger.record': 'Record payment',
+  'ledger.direction': 'Money',
+  'ledger.received': 'Received from member',
+  'ledger.refunded': 'Refunded to member',
+  'ledger.approve': 'Approve',
+  'ledger.reject': 'Reject',
+  'ledger.cancel': 'Cancel',
+  'ledger.approved': 'Settlement approved',
+  'ledger.rejected': 'Settlement rejected',
+  'ledger.cancelled': 'Settlement cancelled',
+  'ledger.recorded': 'Settlement recorded',
+  'ledger.noPending': 'Nothing waiting to be settled.',
+  'ledger.void': 'Void',
+  'ledger.voided': 'Voided',
+  'ledger.voidPrompt': 'Why is this being voided? The reason stays on the record.',
+  'ledger.voidedDone': 'Entry voided — the original amount and reason are kept',
+  'ledger.messName': 'Your name in this mess',
+  'ledger.messNameHint':
+    'Only this mess sees this name. Your account name is kept for other messes, so a new mess never inherits an old nickname.',
+  'ledger.messNameSave': 'Save name',
+  'ledger.messNameSaved': 'Name saved for this mess',
+  'ledger.stayNote':
+    'Nothing here needs deleting. You can join another mess whenever you like: this mess keeps its books, and only you and it can see these months.',
+  'rem.pushOn': 'Background push is on — reminders arrive even when the app is closed.',
+  'rem.enablePush': 'Enable background push',
+  'rem.pushFailed': 'Could not turn on background push on this device.',
   "pwa.ready": 'A new version of Mess Mates is ready.',
   'pwa.reload': 'Reload',
   'pwa.later': 'Later',
+  'theme.label': 'Switch theme',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
+  'theme.system': 'System',
+  'common.cancel': 'Cancel',
+  'common.confirm': 'Confirm',
+  'common.save': 'Save',
+  'common.required': 'Required',
+  'meals.voidTitle': 'Void this entry?',
+  'meals.voidBody': 'The amount stops counting toward the month, but the entry and the reason stay in the records.',
+  'meals.voidReason': 'Reason',
+  'meals.voidReasonPlaceholder': 'Wrong amount, duplicate entry…',
+  'meals.voidConfirm': 'Void entry',
+  'meals.voidUtilityDone': 'Utility voided — out of the split, kept in the history',
+  'meals.voided': 'voided',
+  'meals.receiptBazar': 'Market receipt (optional)',
+  'meals.viewReceipt': 'Receipt',
+  'meals.itemsList': 'Itemised list (optional)',
+  'meals.itemsListHint': 'One item per line, e.g. Rice 10kg',
+  'meals.items': '{count} items',
+  'hub.joinRequests': 'Join requests',
+  'hub.joinRequestsHint': 'Sharing the code only starts a request — an admin approves it',
+  'hub.noJoinRequests': 'No one is waiting to join.',
+  'hub.joinRequested': 'Requested {when}',
+  'hub.approveJoin': 'Approve',
+  'hub.rejectJoin': 'Reject',
+  'hub.joinApproved': 'Mate added to the mess',
+  'hub.joinRejected': 'Join request rejected',
+  'hub.duplicateTitle': 'Two accounts may be the same person',
+  'hub.duplicateBody':
+    '{first} and {second} look like one person ({reason}). Remove one membership to merge them — every past month keeps its figures.',
+  'hub.duplicateReasonName': 'same name',
+  'hub.duplicateReasonEmail': 'same email',
+  'hub.duplicateReasonPhoto': 'same photo',
+  'hub.proUntil': 'Pro until {date}',
+  'hub.privacy': 'Privacy policy',
+  'hub.terms': 'Terms of use',
+  'hub.legalHint': 'What we store, and what you agree to',
+  'auth.joinRequested': 'Join request sent. An admin has to approve it before the books open.',
+  'auth.legal': 'Privacy · Terms',
+  'legal.privacyTitle': 'Privacy policy',
+  'legal.termsTitle': 'Terms of use',
+  'legal.back': 'Back to Mess Mates',
+  'legal.updated': 'Last updated 25 November 2026',
+  'pro.freeCore': 'Free forever: every member, every month, every export.',
+  'pro.activeUntil': 'Active until {date}',
 } as const
 
 export type MessageKey = keyof typeof en
@@ -608,7 +723,7 @@ const bn: Record<MessageKey, string> = {
   'layout.members': '{count} জন সদস্য · {role} অ্যাক্সেস',
   'layout.noCycle': 'কোনো সাইকেল নেই',
   'layout.goPro': 'প্রো নিন',
-  'layout.goProBody': 'সব সদস্যের জন্য বিজ্ঞাপনমুক্ত + প্রিমিয়াম গিল্ড ফ্রেম।',
+  'layout.goProBody': 'সব সদস্যের জন্য প্রিমিয়াম গিল্ড ফ্রেম।',
   'layout.offline': 'অফলাইন — সেভ করা তথ্য দেখানো হচ্ছে',
   'layout.offlineQueued': 'অফলাইন — সেভ করা তথ্য · {count}টি অপেক্ষমাণ',
   'layout.waitingSync': '{count}টি পরিবর্তন সিঙ্কের অপেক্ষায়',
@@ -711,8 +826,6 @@ const bn: Record<MessageKey, string> = {
   'dash.total': 'মোট',
   'dash.guildRank': 'গিল্ড র‍্যাংক · {points} পয়েন্ট',
   'dash.openArena': 'অ্যারিনা খুলুন →',
-  'dash.proAdFree': 'প্রো মেস — সব সদস্যের জন্য বিজ্ঞাপনমুক্ত',
-  'dash.freeTier': 'মেস মেটস · ফ্রি প্ল্যানে কুয়েরি ও স্টোরেজ সীমিত থাকে',
   'dash.rateHint': '{month} · রেট {rate}/মিল',
 
   'rem.title': 'মনে করানো',
@@ -733,6 +846,9 @@ const bn: Record<MessageKey, string> = {
   'rem.approvalsBody': 'অনুমোদনের আগে অপেক্ষমাণ বাজার মিল রেটে ধরা হয় না।',
   'rem.remindAll': 'সবার বাকি মনে করান',
   'rem.enableAlerts': 'ডিভাইস অ্যালার্ট চালু করুন',
+  'rem.enabled': 'ডিভাইস রিমাইন্ডার চালু',
+  'rem.enabledBody':
+    'অ্যাপ খুললে দিনে একবার জানিয়ে দেবে — কাট-অফের আগে মিল, বাকি, ডিউটি ও ভোট।',
   'rem.alertsOn': 'ডিভাইস অ্যালার্ট চালু — অ্যাপ খোলা থাকলে দিনে একবার মনে করানো হবে।',
   'rem.alertsBlocked': 'ব্রাউজার সেটিংসে ডিভাইস অ্যালার্ট বন্ধ আছে।',
   'rem.alertsUnsupported': 'এখানে ডিভাইস অ্যালার্ট সমর্থিত নয়।',
@@ -765,6 +881,16 @@ const bn: Record<MessageKey, string> = {
   'meals.copyPrevHint': '{date}-এর মিল কপি হবে শুধু তাদের জন্য যাদের এখনো কিছু লেখা নেই।',
   'meals.copiedFrom': '{date}-এর মিল {count} জনের জন্য কপি হয়েছে',
   'meals.week': 'সপ্তাহের হিসাব',
+  'meals.standingTitle': 'আমার নিত্যদিনের মিল',
+  'meals.standingHint':
+    'সাধারণত যা খান সেট করুন — অ্যাপ নিজেই লিখে দেবে, তাই হিসাব থেকে বাদ পড়বেন না।',
+  'meals.standingAutoOn': 'অটো-ফিল চালু',
+  'meals.standingAutoOff': 'অটো-ফিল বন্ধ',
+  'meals.standingTurnOn': 'প্রতিদিন আমার নিত্যদিনের মিল লিখুন',
+  'meals.standingTurnOff': 'অটো-ফিল বন্ধ করুন',
+  'meals.standingFill': 'আজকের জন্য লিখুন',
+  'meals.standingFilled': 'আজকের নিত্যদিনের মিল লেখা হয়েছে',
+  'meals.standingLocked': 'মিল কাট-অফ পার হয়েছে — এই দিনটি বদলাতে ম্যানেজারকে বলুন।',
   'meals.bazarForm': 'বাজারের খরচ জমা দিন',
   'meals.autoApproved': 'ম্যানেজারদের জন্য স্বয়ংক্রিয় অনুমোদিত',
   'meals.pendingApproval': 'ম্যানেজার অনুমোদনের অপেক্ষায়',
@@ -859,8 +985,8 @@ const bn: Record<MessageKey, string> = {
   'arena.startDuel': 'ডুয়েল শুরু করুন',
   'arena.winXp': 'জয় · +১০ XP',
   'arena.challengeTitle': 'মেস-বনাম-মেস চ্যালেঞ্জ রুম',
-  'arena.challengeBody': 'রিওয়ার্ডেড অ্যাড দেখে কাস্টম চ্যালেঞ্জ রুম খুলুন — জোর করে বিজ্ঞাপন নেই।',
-  'arena.unlockChallenge': 'চ্যালেঞ্জ খুলুন',
+  'arena.challengeBody': 'মেস-বনাম-মেস বোর্ড খুলে প্রতিদ্বন্দ্বী মেসকে আমন্ত্রণ জানান — কোনো আনলক লাগবে না।',
+  'arena.unlockChallenge': 'চ্যালেঞ্জ শুরু করুন',
   'arena.openRooms': 'খোলা রুম',
   'arena.openRoomsHint': 'চাল লাইভ পৌঁছায় — খেলতে রুম খুলুন',
   'start.title': 'মেস চালু করে নিন',
@@ -877,17 +1003,22 @@ const bn: Record<MessageKey, string> = {
   'settle.transfers': 'কে কাকে টাকা দেবে',
   'settle.transfersHint': '{count}টি পেমেন্টেই মাস শেষ — সবাইকে আলাদা করে ধরতে হবে না।',
   'settle.noTransfers': 'সবাই সমান — কোনো পেমেন্ট লাগবে না।',
+  'settle.owedToMess': 'সদস্যরা মেসের কাছে {amount} ঋণী',
+  'settle.owedToMessHint':
+    'টাকা নেওয়ার মতো কেউ ক্রেডিটে নেই, তাই প্রত্যেকে নিজের অংশ মেস ফান্ডে জমা দেবেন।',
+  'settle.messOwesMembers': 'মেস সদস্যদের {amount} দেবে',
+  'settle.messOwesMembersHint':
+    'জমা খরচের চেয়ে বেশি হয়েছে — মাস শেষে পার্থক্যটা ফিরিয়ে দিন।',
+  'settle.settledNote': 'অনুমোদিত {amount} বিলম্বিত পরিশোধ ইতিমধ্যে এই ব্যালেন্সে ধরা আছে।',
   'settle.copyPlan': 'প্ল্যান কপি',
   'pro.title': 'মেসকে প্রো করুন',
-  'pro.subtitle': 'প্রতিটি সদস্যের জন্য পুরো গিল্ড অভিজ্ঞতা খুলে দিন।',
+  'pro.subtitle': 'পুরো মেসের জন্য বাড়তি সুবিধা।',
   'pro.plan': 'মেস মেটস প্রো',
   'pro.price': '৳১৯৯ / মাস',
   'pro.lead': 'একটি সাবস্ক্রিপশনেই পুরো মেস। বিলিং এখনো হাতে করে হয়, তাই চালু করে দেয় মেস মেটস টিম।',
-  'pro.feature1': 'প্রতিটি সদস্যের জন্য বিজ্ঞাপনমুক্ত ড্যাশবোর্ড ও অ্যারিনা',
-  'pro.feature2': 'কাস্টম গিল্ড ব্যানার আপলোড ও অ্যানিমেটেড এমব্লেম প্রিসেট',
-  'pro.feature3': 'আনলিমিটেড পুরোনো মাসের আর্কাইভ',
-  'pro.feature4': 'স্বয়ংক্রিয় পেমেন্ট-বিলম্ব রিমাইন্ডার',
-  'pro.feature5': 'প্রিমিয়াম অ্যাভাটার ফ্রেম অন্তর্ভুক্ত',
+  'pro.feature1': 'প্রতিটি সদস্যের জন্য প্রিমিয়াম অ্যাভাটার ফ্রেম',
+  'pro.feature2': 'হোয়াটসঅ্যাপে টিমের কাছ থেকে অগ্রাধিকার সেটআপ সহায়তা',
+  'pro.feature3': 'আপনার মেসের জন্য মেস মেটস চালু রাখতে সাহায্য করে',
   'pro.contact': 'প্রো চালু করার অনুরোধ',
   'pro.contactHint':
     'অ্যাপের ভেতরে কার্ড বা বিকাশ চেকআউট এখনো নেই। উপরের নম্বরে হোয়াটসঅ্যাপে মেসেজ দিন, মাসিক ফি সরাসরি পরিশোধ করুন, টিম এই মেসের প্রো চালু করে দেবে।',
@@ -913,11 +1044,10 @@ const bn: Record<MessageKey, string> = {
   'arena.guildBannerHint': 'রেডি গ্রেডিয়েন্ট — সাথে সাথে, ছবি আপলোড লাগবে না',
   'arena.emblem': 'এমব্লেম',
   'arena.avatarFrames': 'অ্যাভাটার ফ্রেম',
-  'arena.avatarFramesHint': 'প্রিমিয়াম ফ্রেমে রিওয়ার্ডেড অ্যাড বা মেস প্রো লাগে',
+  'arena.avatarFramesHint': 'প্রিমিয়াম ফ্রেম মেস প্রো-তে খোলে',
   'arena.xp': '{xp} XP',
   'arena.premiumActive': 'প্রিমিয়াম ফ্রেম চালু',
   'arena.standardFrames': 'সাধারণ ফ্রেম',
-  'arena.ad': 'অ্যাড',
   'arena.upgrade': 'মেসকে প্রো করুন',
   'arena.proGuild': 'প্রো গিল্ড — সবার জন্য প্রিমিয়াম ফ্রেম খোলা',
   'arena.leaderboard': 'সেরা মেস লিডারবোর্ড',
@@ -943,6 +1073,7 @@ const bn: Record<MessageKey, string> = {
   'settle.colUtility': 'ইউটিলিটি',
   'settle.colPayable': 'প্রদেয়',
   'settle.colDeposits': 'জমা',
+  'settle.colSettled': 'নিষ্পত্তি',
   'settle.colCarried': 'বহনকৃত',
   'settle.colBalance': 'ব্যালেন্স',
   'settle.totalDues': 'মোট বাকি',
@@ -952,7 +1083,7 @@ const bn: Record<MessageKey, string> = {
   'settle.refundableBody': 'ধনাত্মক ব্যালেন্সের সদস্যদের ফিরিয়ে দিন।',
   'settle.howTitle': 'কীভাবে হিসাব হয়',
   'settle.howBody':
-    'মিল রেট = অনুমোদিত বাজার ÷ মেসের মোট মিল। প্রদেয় = সদস্যের মিল × মিল রেট + নির্দিষ্ট ইউটিলিটি ভাগ। ব্যালেন্স = জমা + আগের মাস থেকে বহন করা ব্যালেন্স − প্রদেয়। আগের মাসের unpaid বাকি স্বয়ংক্রিয়ভাবে বহন হয়; বেশি দিলে ক্রেডিট হিসেবে দেখায়। অনুমোদনের আগে অপেক্ষমাণ বাজার বাদ থাকে।',
+    'মিল রেট = অনুমোদিত বাজার ÷ মেসের মোট মিল। প্রদেয় = সদস্যের মিল × মিল রেট + নির্দিষ্ট ইউটিলিটি ভাগ। ব্যালেন্স = জমা + অনুমোদিত পরিশোধ + আগের মাস থেকে বহন করা ব্যালেন্স − প্রদেয়। আগের মাসের unpaid বাকি স্বয়ংক্রিয়ভাবে বহন হয়; বেশি দিলে ক্রেডিট হিসেবে দেখায়। অনুমোদনের আগে অপেক্ষমাণ বাজার বাদ থাকে।',
   'settle.preparedBy': 'প্রস্তুত করেছেন (ম্যানেজার)',
   'settle.approvedBy': 'অনুমোদন করেছেন (অ্যাডমিন)',
   'settle.generatedPro': 'মেস মেটস প্রো দিয়ে তৈরি',
@@ -1042,9 +1173,9 @@ const bn: Record<MessageKey, string> = {
   'hub.cyclesNote':
     'নতুন মাস শুরু করলে নতুন সাইকেল খোলে ও বাকিগুলো বন্ধ হয়। ড্যাশবোর্ড সুইচার থেকে আগের মাসগুলো পড়া যাবে।',
   'hub.proTitle': 'মেস মেটস প্রো',
-  'hub.proBody': 'সব সদস্যের জন্য বিজ্ঞাপনমুক্ত, প্রিমিয়াম গিল্ড ফ্রেম, সীমাহীন আর্কাইভ ও স্বয়ংক্রিয় রিমাইন্ডার।',
+  'hub.proBody': 'সব সদস্যের জন্য প্রিমিয়াম গিল্ড ফ্রেম, সাথে টিমের অগ্রাধিকার সেটআপ সহায়তা।',
   'hub.upgradeMess': 'এই মেস আপগ্রেড করুন',
-  'hub.proActive': 'প্রো মেস চালু — সবার জন্য বিজ্ঞাপন বন্ধ।',
+  'hub.proActive': 'প্রো মেস চালু — সব সদস্যের জন্য প্রিমিয়াম ফ্রেম খুলে দেওয়া হয়েছে।',
   'hub.account': 'অ্যাকাউন্ট',
   'hub.resetDemo': 'ডেমো ডেটা রিসেট করুন',
   'hub.demoFooter': 'ডেমো মোড · ডেটা এই ব্রাউজারেই থাকে',
@@ -1149,13 +1280,117 @@ const bn: Record<MessageKey, string> = {
   'meals.cancelPayment': 'অনুরোধ বাতিল',
   'meals.noPendingPayments': 'অনুমোদনের অপেক্ষায় কিছু নেই।',
   'meals.approvedByManager': 'ম্যানেজার অনুমোদিত',
+  'ledger.tab': 'আমার খতিয়ান',
+  'ledger.title': 'সব মেসের আপনার হিসাব',
+  'ledger.hint': 'অ্যাকাউন্ট একটাই, হিসাব মেস আলাদা। এই মাসগুলো শুধু আপনি আর যে মেসে লেখা হয়েছিল সেই মেস দেখতে পারে।',
+  'ledger.empty': 'এখনো কোনো মাস নেই। কোনো মেসে খাবার বা টাকা যোগ করলে এখানে দেখা যাবে।',
+  'ledger.month': 'মাস',
+  'ledger.payable': 'দিতে হবে',
+  'ledger.paid': 'জমা',
+  'ledger.settled': 'পরে নিষ্পত্তি',
+  'ledger.outstanding': 'বাকি',
+  'ledger.owe': 'আপনি {amount} দেন',
+  'ledger.credit': 'আপনাকে {amount} দেবে',
+  'ledger.settle': 'নিষ্পত্তি',
+  'ledger.settleTitle': '{mess} মিটিয়ে দিন',
+  'ledger.settleHint':
+    'মাসটি বন্ধ, তাই হিসাব ঠিক যেমন আছে তেমনই থাকবে। আপনার পেমেন্ট পাশে লেখা হবে আর বাকি কমবে। ম্যানেজার অনুমোদন করবেন, আর রেকর্ডে টাকা, তারিখ ও কে পাঠিয়েছে থাকবে।',
+  'ledger.amount': 'টাকা ({symbol})',
+  'ledger.note': 'নোট',
+  'ledger.send': 'ম্যানেজারকে পাঠান',
+  'ledger.requestSent': 'পাঠানো হয়েছে। ম্যানেজার অনুমোদন করবেন।',
+  'ledger.waiting': 'ম্যানেজারের অপেক্ষায়',
+  'ledger.pending': 'অপেক্ষমাণ',
+  'ledger.recent': 'সাম্প্রতিক নিষ্পত্তি',
+  'ledger.approvedStatus': 'অনুমোদিত',
+  'ledger.settlements': 'পরে দেওয়া-নেওয়া',
+  'ledger.settlementsHint': 'মাস বন্ধের পর দেওয়া বা নেওয়া টাকা। মাসের হিসাব বদলায় না, তাই কেউ চুপচাপ বদলাতে পারবে না।',
+  'ledger.record': 'পেমেন্ট লিখুন',
+  'ledger.direction': 'টাকা',
+  'ledger.received': 'সদস্যের কাছ থেকে পেয়েছি',
+  'ledger.refunded': 'সদস্যকে ফেরত দিয়েছি',
+  'ledger.approve': 'অনুমোদন',
+  'ledger.reject': 'বাতিল',
+  'ledger.cancel': 'বাতিল করুন',
+  'ledger.approved': 'নিষ্পত্তি অনুমোদিত',
+  'ledger.rejected': 'নিষ্পত্তি বাতিল হয়েছে',
+  'ledger.cancelled': 'নিষ্পত্তি বাতিল হয়েছে',
+  'ledger.recorded': 'নিষ্পত্তি লেখা হয়েছে',
+  'ledger.noPending': 'নিষ্পত্তির অপেক্ষায় কিছু নেই।',
+  'ledger.void': 'বাতিল করুন',
+  'ledger.voided': 'বাতিল করা',
+  'ledger.voidPrompt': 'কেন বাতিল করছেন? কারণটি রেকর্ডে থাকবে।',
+  'ledger.voidedDone': 'এন্ট্রি বাতিল — আসল টাকা ও কারণ সংরক্ষিত',
+  'ledger.messName': 'এই মেসে আপনার নাম',
+  'ledger.messNameHint': 'শুধু এই মেস এই নাম দেখবে। অন্য মেসের জন্য আপনার অ্যাকাউন্টের নাম থাকবে, তাই নতুন মেস পুরোনো ডাকনাম পায় না।',
+  'ledger.messNameSave': 'নাম সংরক্ষণ',
+  'ledger.messNameSaved': 'এই মেসের নাম সংরক্ষিত',
+  'ledger.stayNote': 'কিছু মুছে ফেলার দরকার নেই। যখন খুশি নতুন মেসে যেতে পারেন: এই মেস তার হিসাব রাখে, যা শুধু আপনি আর এই মেস দেখতে পারে।',
   'pwa.later': 'পরে',
+  'rem.pushOn': 'ব্যাকগ্রাউন্ড পুশ চালু — অ্যাপ বন্ধ থাকলেও মনে করানো আসবে।',
+  'rem.enablePush': 'ব্যাকগ্রাউন্ড পুশ চালু করুন',
+  'rem.pushFailed': 'এই ডিভাইসে ব্যাকগ্রাউন্ড পুশ চালু করা যায়নি।',
+  'theme.label': 'থিম বদলান',
+  'theme.light': 'লাইট',
+  'theme.dark': 'ডার্ক',
+  'theme.system': 'সিস্টেম',
+  'common.cancel': 'বাতিল',
+  'common.confirm': 'নিশ্চিত করুন',
+  'common.save': 'সংরক্ষণ',
+  'common.required': 'আবশ্যক',
+  'meals.voidTitle': 'এই এন্ট্রিটি বাতিল করবেন?',
+  'meals.voidBody': 'টাকাটা আর এই মাসের হিসাবে ধরা হবে না, তবে এন্ট্রি ও কারণ রেকর্ডে থেকে যাবে।',
+  'meals.voidReason': 'কারণ',
+  'meals.voidReasonPlaceholder': 'ভুল পরিমাণ, ডুপ্লিকেট এন্ট্রি…',
+  'meals.voidConfirm': 'এন্ট্রি বাতিল',
+  'meals.voidUtilityDone': 'ইউটিলিটি বাতিল — ভাগ থেকে বাদ, ইতিহাসে রাখা হয়েছে',
+  'meals.voided': 'বাতিল',
+  'meals.receiptBazar': 'বাজারের রসিদ (ঐচ্ছিক)',
+  'meals.viewReceipt': 'রসিদ',
+  'meals.itemsList': 'আইটেমের তালিকা (ঐচ্ছিক)',
+  'meals.itemsListHint': 'প্রতি লাইনে একটি আইটেম, যেমন চাল ১০ কেজি',
+  'meals.items': '{count}টি আইটেম',
+  'hub.joinRequests': 'যোগ দেওয়ার অনুরোধ',
+  'hub.joinRequestsHint': 'কোড শেয়ার করলে শুধু অনুরোধ শুরু হয় — অ্যাডমিন অনুমোদন দেন',
+  'hub.noJoinRequests': 'যোগ দেওয়ার জন্য কেউ অপেক্ষায় নেই।',
+  'hub.joinRequested': '{when} অনুরোধ করেছেন',
+  'hub.approveJoin': 'অনুমোদন',
+  'hub.rejectJoin': 'প্রত্যাখ্যান',
+  'hub.joinApproved': 'সদস্য মেসে যোগ হয়েছে',
+  'hub.joinRejected': 'যোগ দেওয়ার অনুরোধ প্রত্যাখ্যাত',
+  'hub.duplicateTitle': 'দুটি অ্যাকাউন্ট একই ব্যক্তির হতে পারে',
+  'hub.duplicateBody':
+    '{first} ও {second} একই ব্যক্তি বলে মনে হচ্ছে ({reason})। একটি সদস্যপদ সরিয়ে তাদের এক করুন — প্রতিটি পুরনো মাসের হিসাব অপরিবর্তিত থাকবে।',
+  'hub.duplicateReasonName': 'একই নাম',
+  'hub.duplicateReasonEmail': 'একই ইমেইল',
+  'hub.duplicateReasonPhoto': 'একই ছবি',
+  'hub.proUntil': '{date} পর্যন্ত প্রো',
+  'hub.privacy': 'গোপনীয়তা নীতি',
+  'hub.terms': 'ব্যবহারের শর্ত',
+  'hub.legalHint': 'আমরা কী সংরক্ষণ করি, আর আপনি কীতে সম্মত হচ্ছেন',
+  'auth.joinRequested': 'যোগ দেওয়ার অনুরোধ পাঠানো হয়েছে। হিসাব খোলার আগে অ্যাডমিনকে অনুমোদন দিতে হবে।',
+  'auth.legal': 'গোপনীয়তা · শর্ত',
+  'legal.privacyTitle': 'গোপনীয়তা নীতি',
+  'legal.termsTitle': 'ব্যবহারের শর্ত',
+  'legal.back': 'মেস মেটসে ফিরুন',
+  'legal.updated': 'সর্বশেষ হালনাগাদ ২৫ নভেম্বর ২০২৬',
+  'pro.freeCore': 'চিরকাল ফ্রি: সব সদস্য, সব মাস, সব এক্সপোর্ট।',
+  'pro.activeUntil': '{date} পর্যন্ত সক্রিয়',
 }
 
 export const messageKeys = Object.keys(en) as MessageKey[]
 
 const dictionaries: Record<Lang, Record<MessageKey, string>> = { en, bn }
 const listeners = new Set<() => void>()
+
+function subscribeLang(onChange: () => void): () => void {
+  listeners.add(onChange)
+  if (typeof window !== 'undefined') window.addEventListener(CHANGE_EVENT, onChange)
+  return () => {
+    listeners.delete(onChange)
+    if (typeof window !== 'undefined') window.removeEventListener(CHANGE_EVENT, onChange)
+  }
+}
 
 function readLang(): Lang {
   try {
@@ -1197,6 +1432,15 @@ export function toggleLang(): Lang {
   return next
 }
 
+const BN_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯']
+
+/** Numeric interpolation follows the language, so "{count} members" reads
+ *  naturally in Bangla without every call site formatting the number. */
+function localiseNumber(value: string | number, lang: Lang): string {
+  if (lang !== 'bn' || typeof value !== 'number') return String(value)
+  return String(value).replace(/\d/g, (digit) => BN_DIGITS[Number(digit)] ?? digit)
+}
+
 export function translate(
   key: MessageKey,
   vars?: Record<string, string | number>,
@@ -1205,7 +1449,7 @@ export function translate(
   const template = dictionaries[lang][key] ?? en[key] ?? key
   if (!vars) return template
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
-    name in vars ? String(vars[name]) : match,
+    name in vars ? localiseNumber(vars[name], lang) : match,
   )
 }
 
@@ -1220,7 +1464,9 @@ export function useI18n(): {
   toggle: () => void
   t: (key: MessageKey, vars?: Record<string, string | number>) => string
 } {
-  const [lang, setLangState] = useState<Lang>(current)
+  // An external store: module state is the source of truth, so a language
+  // switch does not need a setState-inside-an-effect to reach the hook.
+  const lang = useSyncExternalStore(subscribeLang, () => current, () => current)
 
   // Stored language has to mark the document too, or the Bangla font and
   // line-height never apply on a fresh load.
@@ -1228,26 +1474,8 @@ export function useI18n(): {
     if (typeof document !== 'undefined') document.documentElement.lang = lang
   }, [lang])
 
-  useEffect(() => {
-    setLangState(current)
-    const onChange = () => setLangState(current)
-    listeners.add(onChange)
-    window.addEventListener(CHANGE_EVENT, onChange)
-    return () => {
-      listeners.delete(onChange)
-      window.removeEventListener(CHANGE_EVENT, onChange)
-    }
-  }, [])
-
-  const change = useCallback((next: Lang) => {
-    setLang(next)
-    window.dispatchEvent(new Event(CHANGE_EVENT))
-  }, [])
-
-  const flip = useCallback(() => {
-    toggleLang()
-    window.dispatchEvent(new Event(CHANGE_EVENT))
-  }, [])
+  const change = useCallback((next: Lang) => setLang(next), [])
+  const flip = useCallback(() => toggleLang(), [])
 
   const translator = useCallback(
     (key: MessageKey, vars?: Record<string, string | number>) => translate(key, vars, lang),

@@ -1,11 +1,16 @@
 import type {
   BazarDuty,
   BazarExpense,
+  CycleTotals,
   DailyMeal,
   DepositRequest,
+  DuesSettlement,
+  LedgerRow,
   FixedUtility,
   GameRoom,
   GameType,
+  JoinRequest,
+  LiveChange,
   ManagerTerm,
   MemberDeposit,
   MemberRequest,
@@ -18,6 +23,7 @@ import type {
   PollVote,
   Profile,
   Role,
+  SupportOverview,
   Workspace,
 } from './types'
 import type {
@@ -30,9 +36,12 @@ import type {
   GamePatch,
   MealInput,
   PollInput,
+  SettlementInput,
+  SettlementRecordInput,
   UtilityInput,
 } from './backend'
 import { managerWinner, pollProgress, removalVerdict } from './governance'
+import { round2 } from './calc'
 import { monthLabelFor, todayISO } from './format'
 
 const STORAGE_KEY = 'messmates.demo.v1'
@@ -58,6 +67,8 @@ interface DemoState {
   bans: MessBan[]
   managerTerms: ManagerTerm[]
   depositRequests: DepositRequest[]
+  settlements: DuesSettlement[]
+  joinRequests?: JoinRequest[]
 }
 
 const uid = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`
@@ -134,6 +145,9 @@ function seedMonth(
     items_summary: entry.items,
     expense_date: isoAt(month, entry.day),
     status: entry.status ?? 'approved',
+    voided_at: null,
+    voided_by: null,
+    void_reason: '',
   }))
 
   const utilities: FixedUtility[] = utilitySpec.map((entry) => ({
@@ -154,6 +168,9 @@ function seedMonth(
     method: 'bkash',
     reference: '',
     proof_path: null,
+    voided_at: null,
+    voided_by: null,
+    void_reason: '',
   }))
 
   return { meals, bazar, utilities, deposits }
@@ -245,6 +262,8 @@ function seedState(): DemoState {
     role: person.role,
     status: 'active',
     joined_at: new Date(Date.now() - (90 - index * 5) * 86400_000).toISOString(),
+    display_name: '',
+    avatar_url: null,
     profile: profiles[index],
   }))
 
@@ -402,6 +421,46 @@ function seedState(): DemoState {
         created_at: hoursAgo(4),
       },
     ],
+    settlements: [
+      {
+        id: 'settlement-1',
+        mess_id: 'mess-chittagong',
+        cycle_id: previousCycleId,
+        user_id: 'u-nayeem',
+        amount: 500,
+        direction: 'member_to_mess',
+        paid_date: daysFromToday(-2),
+        method: 'bkash',
+        reference: 'BKA8812',
+        proof_path: null,
+        note: 'Paid the rest of last month after the cycle closed',
+        status: 'approved',
+        requested_by: 'u-nayeem',
+        decided_by: 'u-rakib',
+        decided_at: hoursAgo(40),
+        decision_note: 'Seen on the manager bKash statement',
+        created_at: hoursAgo(44),
+      },
+      {
+        id: 'settlement-2',
+        mess_id: 'mess-chittagong',
+        cycle_id: previousCycleId,
+        user_id: 'u-abir',
+        amount: 800,
+        direction: 'member_to_mess',
+        paid_date: todayISO(),
+        method: 'cash',
+        reference: '',
+        proof_path: null,
+        note: 'Late top-up for the closed month',
+        status: 'pending',
+        requested_by: 'u-abir',
+        decided_by: null,
+        decided_at: null,
+        decision_note: '',
+        created_at: hoursAgo(2),
+      },
+    ],
     votes: [
       { id: 'vote-1', poll_id: 'poll-1', user_id: 'u-abir', option_index: 0 },
       { id: 'vote-2', poll_id: 'poll-1', user_id: 'u-rakib', option_index: 0 },
@@ -474,10 +533,28 @@ function seedState(): DemoState {
   }
 }
 
-/** Older demo snapshots predate governance; fill in what they are missing. */
+/** Older demo snapshots predate governance and the ledger; fill the gaps. */
 function normalize(parsed: DemoState): DemoState {
   return {
     ...parsed,
+    members: (parsed.members ?? []).map((member) => ({
+      ...member,
+      display_name: member.display_name ?? '',
+      avatar_url: member.avatar_url ?? null,
+    })),
+    bazar: (parsed.bazar ?? []).map((row) => ({
+      ...row,
+      voided_at: row.voided_at ?? null,
+      voided_by: row.voided_by ?? null,
+      void_reason: row.void_reason ?? '',
+    })),
+    deposits: (parsed.deposits ?? []).map((row) => ({
+      ...row,
+      voided_at: row.voided_at ?? null,
+      voided_by: row.voided_by ?? null,
+      void_reason: row.void_reason ?? '',
+    })),
+    settlements: parsed.settlements ?? [],
     polls: (parsed.polls ?? []).map((poll) => ({
       ...poll,
       kind: poll.kind ?? 'general',
@@ -567,6 +644,8 @@ export function createDemoBackend(): Backend {
     bans: state.bans,
     managerTerms: state.managerTerms,
     depositRequests: state.depositRequests,
+    settlements: state.settlements,
+    joinRequests: state.joinRequests ?? [],
   })
 
   const resetIfNeeded = () => {
@@ -578,6 +657,8 @@ export function createDemoBackend(): Backend {
         role: 'admin',
         status: 'active',
         joined_at: new Date().toISOString(),
+        display_name: '',
+        avatar_url: null,
         profile: state.profile,
       })
     }
@@ -612,7 +693,7 @@ export function createDemoBackend(): Backend {
 
     // The demo workspace lives in one browser and has no server to broadcast
     // from, so there is nothing to subscribe to.
-    subscribe() {
+    subscribe(_onChange: (change: LiveChange) => void) {
       return () => undefined
     },
 
@@ -650,6 +731,8 @@ export function createDemoBackend(): Backend {
           role: 'admin',
           status: 'active',
           joined_at: now.toISOString(),
+          display_name: '',
+          avatar_url: null,
           profile: { ...state.profile, is_pro: state.profile.is_pro },
         },
       ]
@@ -667,11 +750,13 @@ export function createDemoBackend(): Backend {
       state.bans = []
       state.managerTerms = []
       state.depositRequests = []
+      state.settlements = []
+      state.joinRequests = []
       syncLeaderboardRow()
       persist()
     },
 
-    async joinMess(code) {
+    async joinMess(code): Promise<'joined' | 'requested'> {
       if (code.trim().toUpperCase() !== state.mess.invite_code) {
         throw new Error('Invalid invite code. Ask your mess admin for the 6-character code.')
       }
@@ -686,9 +771,29 @@ export function createDemoBackend(): Backend {
           role: 'member',
           status: 'active',
           joined_at: new Date().toISOString(),
+          display_name: '',
+          avatar_url: null,
           profile: state.profile,
         })
       }
+      persist()
+      return 'joined'
+    },
+
+    async savePushSubscription() {
+      // Demo mode has no server to send from; the in-app reminder still works.
+    },
+
+    async removePushSubscription() {
+      // Nothing stored locally.
+    },
+
+    async decideJoinRequest(id, approve) {
+      const request = (state.joinRequests ?? []).find((entry) => entry.id === id)
+      if (!request) throw new Error('That join request no longer exists.')
+      request.status = approve ? 'approved' : 'rejected'
+      request.decided_by = state.profile.id
+      request.decided_at = new Date().toISOString()
       persist()
     },
 
@@ -762,8 +867,13 @@ export function createDemoBackend(): Backend {
         buyer_id: state.profile.id,
         amount: input.amount,
         items_summary: input.items,
+        items: input.itemsList ?? [],
+        proof_path: input.proofPath ?? null,
         expense_date: input.date,
         status: isManager() ? 'approved' : 'pending',
+        voided_at: null,
+        voided_by: null,
+        void_reason: '',
       })
       persist()
     },
@@ -774,8 +884,15 @@ export function createDemoBackend(): Backend {
       persist()
     },
 
-    async deleteBazar(id) {
-      state.bazar = state.bazar.filter((item) => item.id !== id)
+    async voidBazar(id, reason) {
+      const entry = state.bazar.find((item) => item.id === id)
+      if (!entry) throw new Error('That bazar entry does not exist.')
+      if (!isManager()) throw new Error('Only the mess admin or manager can void a bazar entry.')
+      if (entry.voided_at) throw new Error('That entry is already voided.')
+      if (!reason.trim()) throw new Error('Give a reason so the record explains itself.')
+      entry.voided_at = new Date().toISOString()
+      entry.voided_by = state.profile.id
+      entry.void_reason = reason.trim()
       persist()
     },
 
@@ -795,6 +912,18 @@ export function createDemoBackend(): Backend {
       persist()
     },
 
+    async voidUtility(id, reason) {
+      const entry = state.utilities.find((item) => item.id === id)
+      if (!entry) throw new Error('That utility does not exist.')
+      if (!isManager()) throw new Error('Only the mess admin or manager can void a utility.')
+      if (entry.voided_at) throw new Error('That utility is already voided.')
+      if (!reason.trim()) throw new Error('Give a reason so the record explains itself.')
+      entry.voided_at = new Date().toISOString()
+      entry.voided_by = state.profile.id
+      entry.void_reason = reason.trim()
+      persist()
+    },
+
     async addDeposit(input: DepositInput) {
       state.deposits.push({
         id: uid('dep'),
@@ -806,6 +935,9 @@ export function createDemoBackend(): Backend {
         method: input.method ?? 'cash',
         reference: input.reference ?? '',
         proof_path: input.proofPath ?? null,
+        voided_at: null,
+        voided_by: null,
+        void_reason: '',
       })
       persist()
     },
@@ -823,8 +955,196 @@ export function createDemoBackend(): Backend {
       return path
     },
 
-    async deleteDeposit(id) {
-      state.deposits = state.deposits.filter((item) => item.id !== id)
+    async voidDeposit(id, reason) {
+      const entry = state.deposits.find((item) => item.id === id)
+      if (!entry) throw new Error('That payment does not exist.')
+      if (!isManager()) throw new Error('Only the mess admin or manager can void a payment.')
+      if (entry.voided_at) throw new Error('That payment is already voided.')
+      if (!reason.trim()) throw new Error('Give a reason so the record explains itself.')
+      entry.voided_at = new Date().toISOString()
+      entry.voided_by = state.profile.id
+      entry.void_reason = reason.trim()
+      persist()
+    },
+
+    async setMemberIdentity(patch) {
+      const member = state.members.find(
+        (entry) => entry.user_id === state.profile.id && entry.status === 'active',
+      )
+      if (!member) throw new Error('Join a mess before setting a name for it.')
+      member.display_name = (patch.displayName ?? '').trim().slice(0, 40)
+      if (patch.avatarUrl !== undefined) member.avatar_url = patch.avatarUrl
+      persist()
+    },
+
+    // The demo has one mess, so this is the same arithmetic `my_ledger()` does
+    // in SQL: split the month across everyone who ate or paid in it, then show
+    // only the caller's own line.
+    async loadLedger(): Promise<LedgerRow[]> {
+      const me = state.profile.id
+      const membership = state.members.find((entry) => entry.user_id === me)
+      if (!membership) return []
+
+      const cycles = [...state.cycles].sort((a, b) => b.month_label.localeCompare(a.month_label))
+      return cycles.map((cycle) => {
+        const meals = state.meals.filter((row) => row.cycle_id === cycle.id)
+        const bazar = state.bazar.filter(
+          (row) => row.cycle_id === cycle.id && row.status === 'approved' && !row.voided_at,
+        )
+        const utilities = state.utilities.filter((row) => row.cycle_id === cycle.id)
+        const deposits = state.deposits.filter((row) => row.cycle_id === cycle.id && !row.voided_at)
+        const totalMeals = round2(
+          meals.reduce(
+            (sum, row) => sum + row.breakfast + row.lunch + row.dinner + row.guest_meals,
+            0,
+          ),
+        )
+        const totalBazar = round2(bazar.reduce((sum, row) => sum + Number(row.amount), 0))
+        const heads =
+          new Set([...meals.map((row) => row.user_id), ...deposits.map((row) => row.user_id)]).size || 1
+        const myMeals = round2(
+          meals
+            .filter((row) => row.user_id === me)
+            .reduce((sum, row) => sum + row.breakfast + row.lunch + row.dinner + row.guest_meals, 0),
+        )
+        const mealCost = totalMeals > 0 ? round2(myMeals * (totalBazar / totalMeals)) : 0
+        const utilityShare = round2(
+          utilities.reduce((sum, row) => sum + Number(row.total_amount), 0) / heads,
+        )
+        const payable = round2(mealCost + utilityShare)
+        const myDeposits = round2(
+          deposits.filter((row) => row.user_id === me).reduce((sum, row) => sum + Number(row.amount), 0),
+        )
+        const myBazar = round2(
+          bazar.filter((row) => row.buyer_id === me).reduce((sum, row) => sum + Number(row.amount), 0),
+        )
+        const settled = (direction: DuesSettlement['direction']) =>
+          round2(
+            state.settlements
+              .filter(
+                (row) =>
+                  row.cycle_id === cycle.id &&
+                  row.user_id === me &&
+                  row.status === 'approved' &&
+                  row.direction === direction,
+              )
+              .reduce((sum, row) => sum + Number(row.amount), 0),
+          )
+        const settledIn = settled('member_to_mess')
+        const settledOut = settled('mess_to_member')
+
+        return {
+          mess_id: state.mess.id,
+          mess_name: state.mess.name,
+          currency_symbol: state.mess.currency_symbol,
+          cycle_id: cycle.id,
+          month_label: cycle.month_label,
+          cycle_status: cycle.status,
+          member_status: membership.status,
+          meals: myMeals,
+          meal_cost: mealCost,
+          utility_share: utilityShare,
+          payable,
+          deposits: myDeposits,
+          bazar_paid: myBazar,
+          settled_in: settledIn,
+          settled_out: settledOut,
+          outstanding: round2(payable - myDeposits - settledIn + settledOut),
+        }
+      })
+    },
+
+    async requestSettlement(input: SettlementInput) {
+      if (!(input.amount > 0)) throw new Error('Enter an amount greater than zero.')
+      const cycle = state.cycles.find((row) => row.id === input.cycleId)
+      if (!cycle) throw new Error('That month does not exist.')
+      if (!state.members.some((member) => member.mess_id === cycle.mess_id && member.user_id === state.profile.id)) {
+        throw new Error('Only a member or a former member of this mess can settle against it.')
+      }
+      if (
+        state.settlements.some(
+          (row) => row.cycle_id === input.cycleId && row.user_id === state.profile.id && row.status === 'pending',
+        )
+      ) {
+        throw new Error('You already have a payment waiting for the manager.')
+      }
+      state.settlements.unshift({
+        id: uid('settlement'),
+        mess_id: cycle.mess_id,
+        cycle_id: cycle.id,
+        user_id: state.profile.id,
+        amount: round2(input.amount),
+        direction: 'member_to_mess',
+        paid_date: input.date,
+        method: input.method ?? 'cash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
+        note: input.note ?? '',
+        status: 'pending',
+        requested_by: state.profile.id,
+        decided_by: null,
+        decided_at: null,
+        decision_note: '',
+        created_at: new Date().toISOString(),
+      })
+      persist()
+    },
+
+    async recordSettlement(input: SettlementRecordInput) {
+      if (!isManager()) throw new Error('Only the mess admin or manager can record a settlement.')
+      if (!(input.amount > 0)) throw new Error('Enter an amount greater than zero.')
+      const cycle = state.cycles.find((row) => row.id === input.cycleId)
+      if (!cycle) throw new Error('That month does not exist.')
+      if (!state.members.some((member) => member.mess_id === cycle.mess_id && member.user_id === input.userId)) {
+        throw new Error('That person was never in this mess.')
+      }
+      state.settlements.unshift({
+        id: uid('settlement'),
+        mess_id: cycle.mess_id,
+        cycle_id: cycle.id,
+        user_id: input.userId,
+        amount: round2(input.amount),
+        direction: input.direction,
+        paid_date: input.date,
+        method: input.method ?? 'cash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
+        note: input.note ?? '',
+        status: 'approved',
+        requested_by: state.profile.id,
+        decided_by: state.profile.id,
+        decided_at: new Date().toISOString(),
+        decision_note: 'Recorded by the mess manager',
+        created_at: new Date().toISOString(),
+      })
+      persist()
+    },
+
+    async decideSettlement(id, approve, note = '') {
+      const row = state.settlements.find((entry) => entry.id === id)
+      if (!row) throw new Error('That settlement does not exist.')
+      if (!isManager()) throw new Error('Only the mess admin or manager can decide a settlement.')
+      if (row.status !== 'pending') throw new Error(`That settlement is already ${row.status}.`)
+      if (row.user_id === state.profile.id) {
+        throw new Error('A payment cannot be approved by the person it belongs to. Ask another manager or the admin.')
+      }
+      row.status = approve ? 'approved' : 'rejected'
+      row.decided_by = state.profile.id
+      row.decided_at = new Date().toISOString()
+      row.decision_note = note
+      persist()
+    },
+
+    async cancelSettlement(id) {
+      const row = state.settlements.find((entry) => entry.id === id)
+      if (!row) throw new Error('That settlement does not exist.')
+      if (row.requested_by !== state.profile.id && !isManager()) {
+        throw new Error('Only the person who sent it can cancel it.')
+      }
+      if (row.status !== 'pending') throw new Error(`That settlement is already ${row.status}.`)
+      row.status = 'cancelled'
+      row.decided_by = state.profile.id
+      row.decided_at = new Date().toISOString()
       persist()
     },
 
@@ -1062,9 +1382,9 @@ export function createDemoBackend(): Backend {
         throw new Error('Pick a closing time in the future.')
       }
 
-      let options: string[] = []
+      let options: string[]
       let candidates: string[] = []
-      let question = ''
+      let question: string
       let target: string | null = null
 
       if (kind === 'member_removal') {
@@ -1239,6 +1559,9 @@ export function createDemoBackend(): Backend {
           method: request.method,
           reference: request.reference,
           proof_path: request.proof_path,
+          voided_at: null,
+          voided_by: null,
+          void_reason: '',
         })
       }
       request.status = approve ? 'approved' : 'rejected'
@@ -1254,27 +1577,72 @@ export function createDemoBackend(): Backend {
       persist()
     },
 
-    async deleteAccount() {
-      if (state.members.some((member) => member.user_id === state.profile.id && member.status === 'active')) {
-        throw new Error('Leave your mess first — ask the admin to approve your leave request.')
-      }
-      state.profile = {
-        ...state.profile,
-        full_name: 'Former member',
-        email: '',
-        avatar_url: null,
-        avatar_frame: 'ring',
-        frame_unlocked_until: null,
-      }
-      state.members = state.members.map((member) =>
-        member.user_id === state.profile.id ? { ...member, profile: state.profile } : member,
+    async loadCycleTotals(cycleId): Promise<CycleTotals | null> {
+      const cycle = state.cycles.find((entry) => entry.id === cycleId)
+      if (!cycle) return null
+      const meals = state.meals.filter((meal) => meal.cycle_id === cycleId)
+      const bazar = state.bazar.filter((expense) => expense.cycle_id === cycleId)
+      const utilities = state.utilities.filter((utility) => utility.cycle_id === cycleId && !utility.voided_at)
+      const deposits = state.deposits.filter((deposit) => deposit.cycle_id === cycleId && !deposit.voided_at)
+      const totalMeals = round2(
+        meals.reduce((sum, meal) => sum + meal.breakfast + meal.lunch + meal.dinner + meal.guest_meals, 0),
       )
-      state.signedIn = false
-      persist()
+      const totalBazar = round2(
+        bazar.filter((expense) => expense.status === 'approved' && !expense.voided_at).reduce((sum, expense) => sum + expense.amount, 0),
+      )
+      return {
+        cycle_id: cycleId,
+        total_meals: totalMeals,
+        meal_rate: totalMeals > 0 ? round2(totalBazar / totalMeals) : 0,
+        total_bazar: totalBazar,
+        pending_bazar: round2(
+          bazar.filter((expense) => expense.status === 'pending' && !expense.voided_at).reduce((sum, expense) => sum + expense.amount, 0),
+        ),
+        total_utilities: round2(utilities.reduce((sum, utility) => sum + utility.total_amount, 0)),
+        total_deposits: round2(deposits.reduce((sum, deposit) => sum + deposit.amount, 0)),
+        active_members: state.members.filter((member) => member.status === 'active').length,
+      }
     },
 
     async loadClientErrors() {
       return []
+    },
+
+    async isPlatformAdmin() {
+      // The demo is the only place a signed-in account can try the console.
+      return true
+    },
+
+    async loadSupportOverview(): Promise<SupportOverview> {
+      const latest = [...state.cycles].sort((a, b) => b.month_label.localeCompare(a.month_label))[0] ?? null
+      return {
+        allowed: true,
+        messes: [
+          {
+            id: state.mess.id,
+            name: state.mess.name,
+            invite_code: state.mess.invite_code,
+            is_pro_mess: state.mess.is_pro_mess,
+            pro_until: state.mess.pro_until ?? null,
+            pro_plan: state.mess.pro_plan ?? null,
+            pro_reference: state.mess.pro_reference ?? null,
+            member_count: state.members.filter((member) => member.status === 'active').length,
+            cycle_label: latest?.month_label ?? null,
+            cycle_status: latest?.status ?? null,
+            created_at: new Date(0).toISOString(),
+          },
+        ],
+        errors: [],
+      }
+    },
+
+    async setMessPro({ messId, until, plan, reference }) {
+      if (state.mess.id !== messId) throw new Error('That mess is not in this demo.')
+      state.mess.pro_until = until
+      state.mess.is_pro_mess = Boolean(until && new Date(until).getTime() > Date.now())
+      state.mess.pro_plan = plan ?? ''
+      state.mess.pro_reference = reference ?? ''
+      persist()
     },
 
     async unlockFrame(frame) {

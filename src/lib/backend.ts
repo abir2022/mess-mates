@@ -6,11 +6,16 @@ import type {
   FixedUtility,
   GameRoom,
   GameType,
+  LedgerRow,
+  LiveChange,
   MealField,
   MemberRequestKind,
   Poll,
+  CycleTotals,
   Profile,
   Role,
+  SettlementDirection,
+  SupportOverview,
   SplitType,
   Workspace,
 } from './types'
@@ -22,6 +27,10 @@ export interface BazarInput {
   amount: number
   items: string
   date: string
+  /** Optional per-item rows behind the free-text summary. */
+  itemsList?: string[]
+  /** Optional market receipt, stored in the private proof bucket. */
+  proofPath?: string | null
 }
 
 export interface UtilityInput {
@@ -80,8 +89,25 @@ export interface DepositRequestInput {
   proofPath?: string | null
 }
 
-export interface GamePatch {
-  state?: Record<string, unknown>
+/** A late payment against a month, including one that has already closed. */
+export interface SettlementInput {
+  /** Omitted only when the member's own ledger row is not loaded yet. */
+  cycleId: string
+  amount: number
+  date: string
+  method?: DepositMethod
+  reference?: string
+  proofPath?: string | null
+  note?: string
+}
+
+/** A manager recording money they already hold for a member. */
+export interface SettlementRecordInput extends SettlementInput {
+  userId: string
+  direction: SettlementDirection
+}
+
+export interface GamePatch {  state?: Record<string, unknown>
   status?: GameRoom['status']
   winnerUserId?: string | null
 }
@@ -94,14 +120,22 @@ export interface Backend {
   signInDemo(): Promise<void>
   signOut(): Promise<void>
   loadWorkspace(): Promise<Workspace | null>
+  /** Server-side totals for one month; null when migration 010 is not applied. */
+  loadCycleTotals(cycleId: string): Promise<CycleTotals | null>
   /**
    * Live updates: calls back when a row this user is allowed to read changes,
    * so the app can reload instead of waiting for a manual refresh. Returns the
    * unsubscribe function. Demo mode has nothing to broadcast and returns a no-op.
    */
-  subscribe(onChange: () => void): () => void
+  subscribe(onChange: (change: LiveChange) => void): () => void
   createMess(name: string, currency: string): Promise<void>
-  joinMess(code: string): Promise<void>
+  /**
+   * Direct join when the database has no join-approval migration yet; a
+   * request that an admin must approve otherwise.
+   */
+  joinMess(code: string): Promise<'joined' | 'requested'>
+  /** Admin side of join approval. */
+  decideJoinRequest(id: string, approve: boolean): Promise<void>
   updateProfile(patch: Partial<Pick<Profile, 'full_name' | 'avatar_frame'>>): Promise<void>
   updateMess(patch: Partial<{ name: string; currency_symbol: string; guild_banner: string; guild_emblem: string; meal_lock_hour: number }>): Promise<void>
   /** Admin only: promote, demote or keep a mate as a plain member. */
@@ -128,14 +162,37 @@ export interface Backend {
   ): Promise<void>
   /** Admin-only, after the poll closes with quorum: applies the outcome. */
   applyPollResult(pollId: string): Promise<string>
+  /**
+   * The name and photo this mess sees for the caller. The account keeps its own
+   * name, so a new mess starts clean.
+   */
+  setMemberIdentity(patch: { displayName: string; avatarUrl?: string | null }): Promise<void>
+  /** The caller's own line in every month of every mess they were ever in. */
+  loadLedger(): Promise<LedgerRow[]>
+  /** Member side: tell the manager a late payment was made. */
+  requestSettlement(input: SettlementInput): Promise<void>
+  /** Manager side: record money already received (or refunded). */
+  recordSettlement(input: SettlementRecordInput): Promise<void>
+  decideSettlement(id: string, approve: boolean, note?: string): Promise<void>
+  cancelSettlement(id: string): Promise<void>
   /** Member side of the money flow: send a payment to the manager. */
   requestDeposit(input: DepositRequestInput): Promise<void>
   decideDepositRequest(id: string, approve: boolean): Promise<void>
   cancelDepositRequest(id: string): Promise<void>
-  /** Allowed once no mess is active; anonymises the profile. */
-  deleteAccount(): Promise<void>
+  /** Saves a Web Push subscription for this account and mess. */
+  savePushSubscription(subscription: {
+    endpoint: string
+    keys: { p256dh: string; auth: string }
+    userAgent?: string
+  }): Promise<void>
+  /** Removes this device's subscription when the user turns push off. */
+  removePushSubscription(endpoint: string): Promise<void>
   /** Admin-only diagnostics from the vendor-free error table. */
   loadClientErrors(): Promise<ClientError[]>
+  /** Platform support: a mess-level console, separate from mess roles. */
+  isPlatformAdmin(): Promise<boolean>
+  loadSupportOverview(): Promise<SupportOverview>
+  setMessPro(input: { messId: string; until: string | null; plan?: string; reference?: string }): Promise<void>
   setMeal(input: MealInput): Promise<void>
   /**
    * Writes a whole day at once. Used by "copy previous day" so a five-member
@@ -144,11 +201,15 @@ export interface Backend {
   setDayMeals(rows: DayMealInput[]): Promise<void>
   addBazar(input: BazarInput): Promise<void>
   setBazarStatus(id: string, status: BazarExpense['status']): Promise<void>
-  deleteBazar(id: string): Promise<void>
+  /** Money rows are never deleted; the manager voids them with a reason. */
+  voidBazar(id: string, reason: string): Promise<void>
   addUtility(input: UtilityInput): Promise<void>
+  /** Kept for old databases; new code voids so the row stays visible. */
   deleteUtility(id: string): Promise<void>
+  /** Takes a utility out of the split without losing the record. */
+  voidUtility(id: string, reason: string): Promise<void>
   addDeposit(input: DepositInput): Promise<void>
-  deleteDeposit(id: string): Promise<void>
+  voidDeposit(id: string, reason: string): Promise<void>
   /** Stores a receipt image and returns the path to keep on the deposit. */
   uploadDepositProof(file: File): Promise<string>
   /** Turns a stored proof path into something the browser can open right now. */
@@ -283,8 +344,8 @@ function createOfflineBackend(inner: Backend): Backend {
       await queued({ kind: 'setBazarStatus', id, status }, () => inner.setBazarStatus(id, status))
     },
 
-    async deleteBazar(id) {
-      await queued({ kind: 'deleteBazar', id }, () => inner.deleteBazar(id))
+    async voidBazar(id, reason) {
+      await queued({ kind: 'voidBazar', id, reason }, () => inner.voidBazar(id, reason))
     },
 
     async addUtility(input) {
@@ -295,12 +356,48 @@ function createOfflineBackend(inner: Backend): Backend {
       await queued({ kind: 'deleteUtility', id }, () => inner.deleteUtility(id))
     },
 
+    async voidUtility(id, reason) {
+      await queued({ kind: 'voidUtility', id, reason }, () => inner.voidUtility(id, reason))
+    },
+
+    async requestSettlement(input) {
+      await queued({ kind: 'requestSettlement', input }, () => inner.requestSettlement(input))
+    },
+
+    async recordSettlement(input) {
+      await queued({ kind: 'recordSettlement', input }, () => inner.recordSettlement(input))
+    },
+
+    async decideSettlement(id, approve, note) {
+      await queued({ kind: 'decideSettlement', id, approve, note: note ?? '' }, () =>
+        inner.decideSettlement(id, approve, note),
+      )
+    },
+
+    async cancelSettlement(id) {
+      await queued({ kind: 'cancelSettlement', id }, () => inner.cancelSettlement(id))
+    },
+
+    async requestDeposit(input) {
+      await queued({ kind: 'requestDeposit', input }, () => inner.requestDeposit(input))
+    },
+
+    async decideDepositRequest(id, approve) {
+      await queued({ kind: 'decideDepositRequest', id, approve }, () =>
+        inner.decideDepositRequest(id, approve),
+      )
+    },
+
+    async cancelDepositRequest(id) {
+      await queued({ kind: 'cancelDepositRequest', id }, () => inner.cancelDepositRequest(id))
+    },
+
     async addDeposit(input) {
       await queued({ kind: 'addDeposit', input }, () => inner.addDeposit(input))
     },
 
-    async deleteDeposit(id) {
-      await queued({ kind: 'deleteDeposit', id }, () => inner.deleteDeposit(id))
+    async voidDeposit(id, reason) {
+      await queued({ kind: 'voidDeposit', id, reason }, () => inner.voidDeposit(id, reason))
     },
 
     async addDuty(input) {
@@ -354,16 +451,32 @@ function createOfflineBackend(inner: Backend): Backend {
         return inner.addBazar(op.input)
       case 'setBazarStatus':
         return inner.setBazarStatus(op.id, op.status)
-      case 'deleteBazar':
-        return inner.deleteBazar(op.id)
+      case 'voidBazar':
+        return inner.voidBazar(op.id, op.reason)
       case 'addUtility':
         return inner.addUtility(op.input)
       case 'deleteUtility':
         return inner.deleteUtility(op.id)
+      case 'voidUtility':
+        return inner.voidUtility(op.id, op.reason)
+      case 'requestSettlement':
+        return inner.requestSettlement(op.input)
+      case 'recordSettlement':
+        return inner.recordSettlement(op.input)
+      case 'decideSettlement':
+        return inner.decideSettlement(op.id, op.approve, op.note)
+      case 'cancelSettlement':
+        return inner.cancelSettlement(op.id)
+      case 'requestDeposit':
+        return inner.requestDeposit(op.input)
+      case 'decideDepositRequest':
+        return inner.decideDepositRequest(op.id, op.approve)
+      case 'cancelDepositRequest':
+        return inner.cancelDepositRequest(op.id)
       case 'addDeposit':
         return inner.addDeposit(op.input)
-      case 'deleteDeposit':
-        return inner.deleteDeposit(op.id)
+      case 'voidDeposit':
+        return inner.voidDeposit(op.id, op.reason)
       case 'addDuty':
         return inner.addDuty(op.input)
       case 'updateDuty':

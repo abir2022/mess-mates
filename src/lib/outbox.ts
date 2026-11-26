@@ -2,15 +2,20 @@ import type {
   BazarInput,
   DayMealInput,
   DepositInput,
+  DepositRequestInput,
   DutyInput,
   MealInput,
   PollInput,
+  SettlementInput,
+  SettlementRecordInput,
   UtilityInput,
 } from './backend'
 import type {
   BazarExpense,
   BazarDuty,
   DailyMeal,
+  DepositRequest,
+  DuesSettlement,
   DutyStatus,
   FixedUtility,
   MemberDeposit,
@@ -51,11 +56,19 @@ export type OutboxOp =
   | { kind: 'setDayMeals'; rows: DayMealInput[] }
   | { kind: 'addBazar'; input: BazarInput }
   | { kind: 'setBazarStatus'; id: string; status: BazarExpense['status'] }
-  | { kind: 'deleteBazar'; id: string }
+  | { kind: 'voidBazar'; id: string; reason: string }
   | { kind: 'addUtility'; input: UtilityInput }
   | { kind: 'deleteUtility'; id: string }
+  | { kind: 'voidUtility'; id: string; reason: string }
+  | { kind: 'requestSettlement'; input: SettlementInput }
+  | { kind: 'recordSettlement'; input: SettlementRecordInput }
+  | { kind: 'decideSettlement'; id: string; approve: boolean; note: string }
+  | { kind: 'cancelSettlement'; id: string }
+  | { kind: 'requestDeposit'; input: DepositRequestInput }
+  | { kind: 'decideDepositRequest'; id: string; approve: boolean }
+  | { kind: 'cancelDepositRequest'; id: string }
   | { kind: 'addDeposit'; input: DepositInput }
-  | { kind: 'deleteDeposit'; id: string }
+  | { kind: 'voidDeposit'; id: string; reason: string }
   | { kind: 'addDuty'; input: DutyInput }
   | { kind: 'updateDuty'; id: string; patch: DutyPatch }
   | { kind: 'deleteDuty'; id: string }
@@ -183,8 +196,13 @@ export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
         buyer_id: ws.profile.id,
         amount: op.input.amount,
         items_summary: op.input.items,
+        items: op.input.itemsList ?? [],
+        proof_path: op.input.proofPath ?? null,
         expense_date: op.input.date,
         status: 'pending',
+        voided_at: null,
+        voided_by: null,
+        void_reason: '',
       }
       return { ...ws, bazar: [...ws.bazar, row] }
     }
@@ -195,8 +213,15 @@ export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
         bazar: ws.bazar.map((row) => (row.id === op.id ? { ...row, status: op.status } : row)),
       }
 
-    case 'deleteBazar':
-      return { ...ws, bazar: ws.bazar.filter((row) => row.id !== op.id) }
+    case 'voidBazar':
+      return {
+        ...ws,
+        bazar: ws.bazar.map((row) =>
+          row.id === op.id
+            ? { ...row, voided_at: now, voided_by: ws.profile.id, void_reason: op.reason }
+            : row,
+        ),
+      }
 
     case 'addUtility': {
       if (!cycleId) return ws
@@ -213,6 +238,132 @@ export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
     case 'deleteUtility':
       return { ...ws, utilities: ws.utilities.filter((row) => row.id !== op.id) }
 
+    case 'voidUtility':
+      return {
+        ...ws,
+        utilities: ws.utilities.map((row) =>
+          row.id === op.id
+            ? { ...row, voided_at: now, voided_by: ws.profile.id, void_reason: op.reason }
+            : row,
+        ),
+      }
+
+    case 'requestSettlement': {
+      const input = op.input
+      const row: DuesSettlement = {
+        id: `local-${newId()}`,
+        mess_id: ws.mess.id,
+        cycle_id: input.cycleId || null,
+        user_id: ws.profile.id,
+        amount: input.amount,
+        direction: 'member_to_mess',
+        paid_date: input.date,
+        method: input.method ?? 'cash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
+        note: input.note ?? '',
+        status: 'pending',
+        requested_by: ws.profile.id,
+        decided_by: null,
+        decided_at: null,
+        decision_note: '',
+        created_at: now,
+      }
+      return { ...ws, settlements: [row, ...ws.settlements] }
+    }
+
+    case 'recordSettlement': {
+      const input = op.input
+      const row: DuesSettlement = {
+        id: `local-${newId()}`,
+        mess_id: ws.mess.id,
+        cycle_id: input.cycleId || null,
+        user_id: input.userId,
+        amount: input.amount,
+        direction: input.direction,
+        paid_date: input.date,
+        method: input.method ?? 'cash',
+        reference: input.reference ?? '',
+        proof_path: input.proofPath ?? null,
+        note: input.note ?? '',
+        status: 'approved',
+        requested_by: ws.profile.id,
+        decided_by: ws.profile.id,
+        decided_at: now,
+        decision_note: '',
+        created_at: now,
+      }
+      return { ...ws, settlements: [row, ...ws.settlements] }
+    }
+
+    case 'decideSettlement':
+      return {
+        ...ws,
+        settlements: ws.settlements.map((row) =>
+          row.id === op.id
+            ? {
+                ...row,
+                status: op.approve ? 'approved' : 'rejected',
+                decided_by: ws.profile.id,
+                decided_at: now,
+                decision_note: op.note,
+              }
+            : row,
+        ),
+      }
+
+    case 'cancelSettlement':
+      return {
+        ...ws,
+        settlements: ws.settlements.map((row) =>
+          row.id === op.id ? { ...row, status: 'cancelled' } : row,
+        ),
+      }
+
+    case 'requestDeposit': {
+      if (!cycleId) return ws
+      const row: DepositRequest = {
+        id: `local-${newId()}`,
+        cycle_id: cycleId,
+        user_id: ws.profile.id,
+        amount: op.input.amount,
+        paid_date: op.input.date,
+        note: op.input.note,
+        method: op.input.method ?? 'bkash',
+        reference: op.input.reference ?? '',
+        proof_path: op.input.proofPath ?? null,
+        status: 'pending',
+        requested_by: ws.profile.id,
+        decided_by: null,
+        decided_at: null,
+        created_at: now,
+      }
+      return { ...ws, depositRequests: [row, ...ws.depositRequests] }
+    }
+
+    case 'decideDepositRequest':
+      return {
+        ...ws,
+        depositRequests: ws.depositRequests.map((row) =>
+          row.id === op.id
+            ? {
+                ...row,
+                status: op.approve ? 'approved' : 'rejected',
+                decided_by: ws.profile.id,
+                decided_at: now,
+              }
+            : row,
+        ),
+      }
+
+    case 'cancelDepositRequest':
+      // The server deletes a withdrawn request; locally it is enough to stop
+      // showing it as pending.
+      return {
+        ...ws,
+        depositRequests: ws.depositRequests.filter((row) => row.id !== op.id),
+      }
+
     case 'addDeposit': {
       if (!cycleId) return ws
       const row: MemberDeposit = {
@@ -225,12 +376,22 @@ export function applyOp(ws: Workspace, op: OutboxOp): Workspace {
         method: op.input.method ?? 'cash',
         reference: op.input.reference ?? '',
         proof_path: op.input.proofPath ?? null,
+        voided_at: null,
+        voided_by: null,
+        void_reason: '',
       }
       return { ...ws, deposits: [...ws.deposits, row] }
     }
 
-    case 'deleteDeposit':
-      return { ...ws, deposits: ws.deposits.filter((row) => row.id !== op.id) }
+    case 'voidDeposit':
+      return {
+        ...ws,
+        deposits: ws.deposits.map((row) =>
+          row.id === op.id
+            ? { ...row, voided_at: now, voided_by: ws.profile.id, void_reason: op.reason }
+            : row,
+        ),
+      }
 
     case 'addDuty': {
       const row: BazarDuty = {

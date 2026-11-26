@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Dice5, RotateCcw, Trophy } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { Avatar, Button, Pill } from './ui'
+import { memberAvatar, memberName } from '../lib/ledger'
 
 const diceFaces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅']
 const ROUNDS = 3
@@ -24,9 +25,9 @@ export function DiceDuel({
   const [rolling, setRolling] = useState(false)
   const reported = useRef(false)
 
-  const nameOf = (id: string) => ws?.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Player'
+  const nameOf = (id: string) => memberName(ws?.members.find((member) => member.user_id === id))
   const frameOf = (id: string) => ws?.members.find((member) => member.user_id === id)?.profile.avatar_frame ?? 'ring'
-  const avatarOf = (id: string) => ws?.members.find((member) => member.user_id === id)?.profile.avatar_url ?? null
+  const avatarOf = (id: string) => memberAvatar(ws?.members.find((member) => member.user_id === id))
 
   const togglePlayer = (id: string) => {
     setPlayerIds((current) => {
@@ -105,8 +106,8 @@ export function DiceDuel({
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Avatar name={member.profile.full_name} url={member.profile.avatar_url} frame={member.profile.avatar_frame} size="sm" />
-                    <span className="text-xs font-bold text-ink-800">{member.profile.full_name}</span>
+                    <Avatar name={memberName(member)} url={memberAvatar(member)} frame={member.profile.avatar_frame} size="sm" />
+                    <span className="text-xs font-bold text-ink-800">{memberName(member)}</span>
                   </span>
                   <span className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-extrabold ${
                     selected ? 'border-brand-600 bg-brand-600 text-white' : 'border-ink-200 text-transparent'

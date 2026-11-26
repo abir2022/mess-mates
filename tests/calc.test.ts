@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { carriedBalances, computeSettlement, round2, settleUpPlan } from '../src/lib/calc'
+import { carriedBalances, computeSettlement, round2, settleUpPlan, settleUpState } from '../src/lib/calc'
 import type {
   BazarExpense,
   DailyMeal,
+  DuesSettlement,
   FixedUtility,
   MemberDeposit,
   MessMember,
@@ -70,6 +71,27 @@ const deposit = (cycle: string, user: string, amount: number): MemberDeposit => 
   note: '',
 })
 
+const settlementRow = (overrides: Partial<DuesSettlement> = {}): DuesSettlement => ({
+  id: 'set-1',
+  mess_id: 'mess',
+  cycle_id: 'oct',
+  user_id: 'abir',
+  amount: 400,
+  direction: 'member_to_mess',
+  paid_date: '2026-11-05',
+  method: 'bkash',
+  reference: '',
+  proof_path: null,
+  note: '',
+  status: 'approved',
+  requested_by: 'abir',
+  decided_by: 'rakib',
+  decided_at: '2026-11-06T10:00:00.000Z',
+  decision_note: '',
+  created_at: '2026-11-05T10:00:00.000Z',
+  ...overrides,
+})
+
 function workspace(rows: {
   users?: string[]
   cycles?: MonthlyCycle[]
@@ -77,6 +99,7 @@ function workspace(rows: {
   bazar?: BazarExpense[]
   utilities?: FixedUtility[]
   deposits?: MemberDeposit[]
+  settlements?: DuesSettlement[]
 }): Workspace {
   const users = rows.users ?? ['abir', 'rakib']
   return {
@@ -100,6 +123,7 @@ function workspace(rows: {
     bazar: rows.bazar ?? [],
     utilities: rows.utilities ?? [],
     deposits: rows.deposits ?? [],
+    settlements: rows.settlements ?? [],
     duty: [],
     polls: [],
     votes: [],
@@ -251,6 +275,101 @@ describe('settleUpPlan', () => {
     const s = computeSettlement(ws, 'nov')
     s.members = s.members.map((member) => ({ ...member, balance: member.userId === 'abir' ? -0.004 : 0.004 }))
     expect(settleUpPlan(s)).toEqual([])
+  })
+})
+
+describe('approved settlements', () => {
+  test('a late payment recorded after the month closed reduces that month\'s balance', () => {
+    const ws = workspace({
+      cycles: [
+        { id: 'nov', mess_id: 'mess', month_label: '2026-11', status: 'open' },
+        { id: 'oct', mess_id: 'mess', month_label: '2026-10', status: 'closed' },
+      ],
+      meals: [meal('oct', 'abir', 0, 100, 0)],
+      bazar: [bazar('oct', 'rakib', 1000)],
+      settlements: [settlementRow({ amount: 400 })],
+    })
+    const october = computeSettlement(ws, 'oct')
+    const abir = october.members.find((m) => m.userId === 'abir')!
+    expect(abir.settledIn).toBe(400)
+    expect(abir.balance).toBe(-600)
+    expect(abir.mealCost).toBe(1000)
+    expect(october.totalSettledIn).toBe(400)
+  })
+
+  test('a settlement is carried into the next month instead of the old due', () => {
+    const ws = workspace({
+      cycles: [
+        { id: 'nov', mess_id: 'mess', month_label: '2026-11', status: 'open' },
+        { id: 'oct', mess_id: 'mess', month_label: '2026-10', status: 'closed' },
+      ],
+      meals: [meal('oct', 'abir', 0, 100, 0)],
+      bazar: [bazar('oct', 'rakib', 1000)],
+      settlements: [settlementRow({ amount: 400 })],
+    })
+    expect(carriedBalances(ws, 'nov').get('abir')).toBe(-600)
+    expect(computeSettlement(ws, 'nov').members.find((m) => m.userId === 'abir')!.balance).toBe(-600)
+  })
+
+  test('a pending request is not money yet', () => {
+    const ws = workspace({
+      cycles: [{ id: 'oct', mess_id: 'mess', month_label: '2026-10', status: 'closed' }],
+      meals: [meal('oct', 'abir', 0, 100, 0)],
+      bazar: [bazar('oct', 'rakib', 1000)],
+      settlements: [settlementRow({ status: 'pending' })],
+    })
+    const abir = computeSettlement(ws, 'oct').members.find((m) => m.userId === 'abir')!
+    expect(abir.settledIn).toBe(0)
+    expect(abir.balance).toBe(-1000)
+  })
+
+  test('a refund to a member raises what that member owes', () => {
+    const ws = workspace({
+      cycles: [{ id: 'oct', mess_id: 'mess', month_label: '2026-10', status: 'closed' }],
+      settlements: [settlementRow({ direction: 'mess_to_member', amount: 250 })],
+    })
+    const abir = computeSettlement(ws, 'oct').members.find((m) => m.userId === 'abir')!
+    expect(abir.settledOut).toBe(250)
+    expect(abir.balance).toBe(-250)
+    expect(computeSettlement(ws, 'oct').totalSettledOut).toBe(250)
+  })
+})
+
+describe('settleUpState', () => {
+  test('transfers when somebody is owed and somebody owes', () => {
+    const ws = workspace({
+      meals: [meal('nov', 'abir', 0, 60, 0), meal('nov', 'rakib', 0, 40, 0)],
+      bazar: [bazar('nov', 'abir', 1000)],
+      deposits: [deposit('nov', 'abir', 500), deposit('nov', 'rakib', 800)],
+    })
+    expect(settleUpState(computeSettlement(ws, 'nov'))).toEqual({ kind: 'transfers', amount: 100 })
+  })
+
+  test('owed_to_mess when every member is short and nobody is owed', () => {
+    const ws = workspace({
+      meals: [meal('nov', 'abir', 0, 100, 0), meal('nov', 'rakib', 0, 100, 0)],
+      bazar: [bazar('nov', 'abir', 2000)],
+      deposits: [deposit('nov', 'abir', 500)],
+    })
+    const state = settleUpState(computeSettlement(ws, 'nov'))
+    expect(state.kind).toBe('owed_to_mess')
+    expect(state.amount).toBe(1500)
+  })
+
+  test('mess_owes_members when deposits ran ahead of spending', () => {
+    const ws = workspace({
+      deposits: [deposit('nov', 'abir', 300), deposit('nov', 'rakib', 300)],
+    })
+    expect(settleUpState(computeSettlement(ws, 'nov'))).toEqual({ kind: 'mess_owes_members', amount: 600 })
+  })
+
+  test('settled only when nobody has a balance left', () => {
+    const ws = workspace({
+      meals: [meal('nov', 'abir', 0, 100, 0), meal('nov', 'rakib', 0, 100, 0)],
+      bazar: [bazar('nov', 'abir', 2000)],
+      deposits: [deposit('nov', 'abir', 1000), deposit('nov', 'rakib', 1000)],
+    })
+    expect(settleUpState(computeSettlement(ws, 'nov'))).toEqual({ kind: 'settled', amount: 0 })
   })
 })
 

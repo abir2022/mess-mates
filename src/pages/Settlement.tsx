@@ -1,37 +1,34 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Crown, Download, Printer, Sparkles } from 'lucide-react'
+import { ArrowLeft, Download, Printer, Sparkles } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { useMonetization } from '../components/Monetization'
 import { CopyButton, Pill } from '../components/ui'
-import { settleUpPlan } from '../lib/calc'
-import { money, monthTitle } from '../lib/format'
+import { settleUpPlan, settleUpState } from '../lib/calc'
+import { formatMeals, money, monthTitle } from '../lib/format'
 import { downloadSettlementPdf } from '../lib/pdf'
+import { memberName } from '../lib/ledger'
 import { useI18n } from '../lib/i18n'
 
 export function Settlement() {
   const { ws, settlement, cycle, user } = useApp()
-  const { showAd, isPro } = useMonetization()
   const { t } = useI18n()
-  const [branded, setBranded] = useState(false)
   const [busy, setBusy] = useState(false)
 
   if (!ws || !settlement || !cycle || !user) return null
 
   const symbol = ws.mess.currency_symbol
-  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const nameOf = (id: string) => memberName(ws.members.find((member) => member.user_id === id))
   const transfers = settleUpPlan(settlement)
+  const state = settleUpState(settlement)
+  const settledTotal = settlement.totalSettledIn + settlement.totalSettledOut
   const planText = [
     `${ws.mess.name} · ${monthTitle(cycle.month_label)}`,
     ...transfers.map((transfer) => `${transfer.from} → ${transfer.to}: ${money(transfer.amount, symbol)}`),
   ].join('\n')
 
-  const brandedPdf = async () => {
+  const downloadPdf = async () => {
     setBusy(true)
     try {
-      const ok = isPro ? true : await showAd('Generate the high-res branded month-end PDF')
-      if (!ok) return
-      setBranded(true)
       await downloadSettlementPdf({
         messName: ws.mess.name,
         monthLabel: monthTitle(cycle.month_label),
@@ -39,7 +36,9 @@ export function Settlement() {
         currencySymbol: symbol,
         settlement,
         generatedBy: nameOf(user.id),
-        branded: true,
+        // The export itself is free for every mess; a Pro mess gets the Pro
+        // footer, a free mess gets the standard one.
+        branded: Boolean(ws.mess.is_pro_mess),
       })
     } finally {
       setBusy(false)
@@ -60,12 +59,11 @@ export function Settlement() {
             <Printer className="h-3.5 w-3.5" /> {t('settle.print')}
           </button>
           <button
-            onClick={brandedPdf}
+            onClick={downloadPdf}
             disabled={busy}
             className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-flame-500 px-3 py-2.5 text-xs font-bold text-ink-900 shadow-sm transition hover:brightness-105 disabled:opacity-60"
           >
             <Download className="h-3.5 w-3.5" /> {t('settle.brandedPdf')}
-            {!isPro ? <span className="rounded bg-ink-900/10 px-1 text-[9px]">AD</span> : null}
           </button>
         </div>
       </div>
@@ -96,7 +94,7 @@ export function Settlement() {
 
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
           {[
-            { label: t('dash.totalMeals'), value: settlement.totalMeals.toFixed(1) },
+            { label: t('dash.totalMeals'), value: formatMeals(settlement.totalMeals) },
             { label: t('meals.approvedBazar'), value: money(settlement.totalBazar, symbol) },
             { label: t('settle.fixedUtilities'), value: money(settlement.totalUtilities, symbol) },
             { label: t('dash.deposits'), value: money(settlement.totalDeposits, symbol) },
@@ -115,10 +113,25 @@ export function Settlement() {
             <div className="min-w-0">
               <p className="text-sm font-extrabold text-ink-900">{t('settle.transfers')}</p>
               <p className="text-[11px] text-ink-500">
-                {transfers.length
+                {state.kind === 'transfers'
                   ? t('settle.transfersHint', { count: transfers.length })
-                  : t('settle.noTransfers')}
+                  : state.kind === 'owed_to_mess'
+                    ? t('settle.owedToMess', { amount: money(state.amount, symbol) })
+                    : state.kind === 'mess_owes_members'
+                      ? t('settle.messOwesMembers', { amount: money(state.amount, symbol) })
+                      : t('settle.noTransfers')}
               </p>
+              {state.kind === 'owed_to_mess' ? (
+                <p className="mt-0.5 text-[11px] text-ink-400">{t('settle.owedToMessHint')}</p>
+              ) : null}
+              {state.kind === 'mess_owes_members' ? (
+                <p className="mt-0.5 text-[11px] text-ink-400">{t('settle.messOwesMembersHint')}</p>
+              ) : null}
+              {settledTotal > 0.005 ? (
+                <p className="mt-1 text-[11px] font-semibold text-brand-700">
+                  {t('settle.settledNote', { amount: money(settledTotal, symbol) })}
+                </p>
+              ) : null}
             </div>
             {transfers.length ? (
               <CopyButton value={planText} label={t('settle.copyPlan')} />
@@ -172,7 +185,7 @@ export function Settlement() {
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-ink-100 pt-2 text-[11px]">
                 <div className="flex justify-between gap-2">
                   <dt className="text-ink-400">{t('settle.colMeals')}</dt>
-                  <dd className="font-bold tabular-nums text-ink-700">{member.meals.toFixed(1)}</dd>
+                  <dd className="font-bold tabular-nums text-ink-700">{formatMeals(member.meals)}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-ink-400">{t('settle.colMealCost')}</dt>
@@ -186,6 +199,14 @@ export function Settlement() {
                   <dt className="text-ink-400">{t('settle.colDeposits')}</dt>
                   <dd className="font-bold tabular-nums text-ink-700">{money(member.deposits, symbol)}</dd>
                 </div>
+                {member.settledIn > 0.005 || member.settledOut > 0.005 ? (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-ink-400">{t('settle.colSettled')}</dt>
+                    <dd className="font-bold tabular-nums text-brand-700">
+                      {money(member.settledIn - member.settledOut, symbol)}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </div>
           ))}
@@ -220,7 +241,7 @@ export function Settlement() {
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{member.lunch}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{member.dinner}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{member.guestMeals}</td>
-                  <td className="px-2 py-2 text-right font-semibold tabular-nums text-ink-800">{member.meals.toFixed(1)}</td>
+                  <td className="px-2 py-2 text-right font-semibold tabular-nums text-ink-800">{formatMeals(member.meals)}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{money(member.mealCost, symbol)}</td>
                   <td className="px-2 py-2 text-right tabular-nums text-ink-600">{money(member.utilityShare, symbol)}</td>
                   <td className="px-2 py-2 text-right font-semibold tabular-nums text-ink-800">{money(member.payable, symbol)}</td>
@@ -238,7 +259,7 @@ export function Settlement() {
               <tr className="border-t-2 border-ink-200 font-extrabold text-ink-900">
                 <td className="py-2.5 pr-2">{t('dash.total')}</td>
                 <td colSpan={4} />
-                <td className="px-2 py-2.5 text-right tabular-nums">{settlement.totalMeals.toFixed(1)}</td>
+                <td className="px-2 py-2.5 text-right tabular-nums">{formatMeals(settlement.totalMeals)}</td>
                 <td className="px-2 py-2.5 text-right tabular-nums">
                   {money(settlement.totalPayable - settlement.totalUtilities, symbol)}
                 </td>
@@ -288,11 +309,11 @@ export function Settlement() {
 
         <footer className="mt-6 flex items-center justify-between border-t border-ink-100 pt-3 text-[9px] text-ink-400">
           <span>
-            {branded ? t('settle.generatedPro') : t('settle.generated')} ·{' '}
-            {nameOf(user.id)} · {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {t('settle.generated')} · {nameOf(user.id)} ·{' '}
+            {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
           <span className="flex items-center gap-1">
-            {branded ? <Crown className="h-3 w-3 text-amber-500" /> : <Sparkles className="h-3 w-3" />} messmates.app
+            <Sparkles className="h-3 w-3" /> messmates.app
           </span>
         </footer>
       </div>

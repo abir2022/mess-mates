@@ -22,7 +22,8 @@ import { START_FEN } from '../lib/chess'
 import { pollProgress } from '../lib/governance'
 import { DiceDuel } from '../components/DiceDuel'
 import { avatarFrames, bannerClass, guildBanners, guildEmblems } from '../lib/backend'
-import { timeAgo } from '../lib/format'
+import { localDigits, timeAgo } from '../lib/format'
+import { memberName } from '../lib/ledger'
 import { useI18n, type MessageKey } from '../lib/i18n'
 
 // The board and chess.js only load when somebody opens a room.
@@ -45,7 +46,7 @@ export function Arena() {
         {ws ? (
           <Pill tone="gold">
             <Trophy className="h-3 w-3" />{' '}
-            {t('arena.guildPoints', { points: ws.mess.guild_points.toLocaleString() })}
+            {t('arena.guildPoints', { points: localDigits(ws.mess.guild_points.toLocaleString()) })}
           </Pill>
         ) : null}
       </div>
@@ -92,7 +93,7 @@ function PollsTab() {
 
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
-  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const nameOf = (id: string) => memberName(ws.members.find((member) => member.user_id === id))
   const polls = [...ws.polls].sort((a, b) => b.created_at.localeCompare(a.created_at))
   const activeMembers = ws.members.filter((member) => member.status === 'active').length
 
@@ -301,7 +302,6 @@ function PollsTab() {
 
 function GamesTab() {
   const { ws, user, backend, run, refresh } = useApp()
-  const { openReward } = useMonetization()
   const { t } = useI18n()
   const [roomId, setRoomId] = useState<string | null>(null)
   const [diceOpen, setDiceOpen] = useState(false)
@@ -318,17 +318,15 @@ function GamesTab() {
     }, 'Chess room open — share the code with a mate')
 
   const createChallenge = () =>
-    openReward('Create a custom mess-vs-mess challenge room', () => {
-      run(async () => {
-        const room = await backend.createGame('challenge', {
-          fen: START_FEN,
-          history: [],
-          lastMove: null,
-          title: `${ws.mess.name} challenge`,
-        })
-        setRoomId(room.id)
-      }, 'Challenge room created — invite a rival mess')
-    })
+    run(async () => {
+      const room = await backend.createGame('challenge', {
+        fen: START_FEN,
+        history: [],
+        lastMove: null,
+        title: `${ws.mess.name} challenge`,
+      })
+      setRoomId(room.id)
+    }, 'Challenge room created — invite a rival mess')
 
   const finishDice = (results: { name: string; score: number }[], winnerUserId: string | null) => {
     run(async () => {
@@ -456,7 +454,7 @@ function GamesTab() {
 
 function GuildTab() {
   const { ws, user, backend, run, busy } = useApp()
-  const { isPro, openUpgrade, openReward } = useMonetization()
+  const { isPro, openUpgrade } = useMonetization()
   const { t } = useI18n()
 
   if (!ws || !user) return null
@@ -465,10 +463,10 @@ function GuildTab() {
   const myRow = ws.leaderboard.find((row) => row.is_own)
 
   const applyFrame = (id: string, premium: boolean) => {
+    // Premium frames are the one real Pro perk, so the honest thing to show a
+    // free mess is the upgrade sheet, not a fake video slot.
     if (premium && !isPro) {
-      openReward('Unlock a premium avatar frame for 24 hours', () => {
-        run(() => backend.unlockFrame(id), 'Premium frame unlocked for 24 hours')
-      })
+      openUpgrade()
       return
     }
     run(() => backend.unlockFrame(id), 'Avatar frame updated')
@@ -487,7 +485,7 @@ function GuildTab() {
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/60">{t('arena.guildProfile')}</p>
               <p className="text-lg font-extrabold leading-tight">{ws.mess.name}</p>
               <p className="mt-0.5 text-[11px] text-white/70">
-                {t('arena.guildPoints', { points: ws.mess.guild_points.toLocaleString() })} ·{' '}
+                {t('arena.guildPoints', { points: localDigits(ws.mess.guild_points.toLocaleString()) })} ·{' '}
                 {t('arena.mates', { count: ws.members.filter((m) => m.status === 'active').length })}
               </p>
             </div>
@@ -564,7 +562,7 @@ function GuildTab() {
                 <span className="text-[11px] font-bold text-ink-700">{frame.label}</span>
                 {frame.premium && !isPro ? (
                   <Pill tone="gold">
-                    <Lock className="h-2.5 w-2.5" /> {t('arena.ad')}
+                    <Lock className="h-2.5 w-2.5" /> {t('dash.pro')}
                   </Pill>
                 ) : ws.profile.avatar_frame === frame.id ? (
                   <Check className="h-3.5 w-3.5 text-brand-600" />
@@ -612,7 +610,7 @@ function GuildTab() {
               </div>
               <div className="flex items-center gap-2">
                 <Users className="h-3.5 w-3.5 text-ink-300" />
-                <span className="text-xs font-extrabold tabular-nums text-ink-900">{row.guild_points.toLocaleString()}</span>
+                <span className="text-xs font-extrabold tabular-nums text-ink-900">{localDigits(row.guild_points.toLocaleString())}</span>
               </div>
             </div>
           ))}

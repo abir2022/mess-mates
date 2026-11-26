@@ -2,12 +2,17 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type {
   BazarDuty,
   BazarExpense,
+  JoinRequest,
   ClientError,
   DailyMeal,
   DepositRequest,
+  CycleTotals,
+  DuesSettlement,
   FixedUtility,
   GameRoom,
   GameType,
+  LedgerRow,
+  LiveChange,
   ManagerTerm,
   MemberDeposit,
   MemberRequest,
@@ -19,6 +24,7 @@ import type {
   Poll,
   PollVote,
   Profile,
+  SupportOverview,
   Workspace,
 } from './types'
 import type {
@@ -31,6 +37,8 @@ import type {
   GamePatch,
   MealInput,
   PollInput,
+  SettlementInput,
+  SettlementRecordInput,
   UtilityInput,
 } from './backend'
 
@@ -147,6 +155,8 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     'mess_bans',
     'manager_terms',
     'deposit_requests',
+    'dues_settlements',
+    'join_requests',
   ]
 
   let liveChannel: ReturnType<typeof supabase.channel> | null = null
@@ -157,11 +167,23 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     liveChannel = null
   }
 
-  function subscribe(onChange: () => void) {
+  function subscribe(onChange: (change: LiveChange) => void) {
     stopLive()
     const channel = supabase.channel('mess-mates-workspace')
     for (const table of liveTables) {
-      channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => onChange())
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
+        const event = payload as unknown as {
+          eventType?: LiveChange['eventType']
+          new?: Record<string, unknown>
+          old?: Record<string, unknown>
+        }
+        onChange({
+          table,
+          eventType: event.eventType ?? 'UPDATE',
+          row: event.new ?? null,
+          oldRow: event.old ?? null,
+        })
+      })
     }
     channel.subscribe()
     liveChannel = channel
@@ -246,6 +268,8 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         role: row.role as MessMember['role'],
         status: row.status as MessMember['status'],
         joined_at: String(row.joined_at),
+        display_name: (row.display_name as string | undefined) ?? '',
+        avatar_url: (row.avatar_url as string | null | undefined) ?? null,
         profile:
           row.profile ??
           ({
@@ -302,13 +326,21 @@ export function createSupabaseBackend(url: string, key: string): Backend {
 
       // Governance tables arrive with 007. On a project that has not run it
       // yet these queries fail quietly and the app behaves as before.
-      const [requestRows, banRows, termRows, depositRequestRows] = await Promise.all([
+      const [requestRows, banRows, termRows, depositRequestRows, settlementRows, joinRequestRows] = await Promise.all([
         supabase.from('member_requests').select('*').eq('mess_id', messId).order('created_at', { ascending: false }),
         supabase.from('mess_bans').select('*').eq('mess_id', messId),
         supabase.from('manager_terms').select('*').eq('mess_id', messId).order('starts_on', { ascending: false }),
         cycleIds.length
           ? supabase.from('deposit_requests').select('*').in('cycle_id', cycleIds)
           : Promise.resolve({ data: [] }),
+        supabase.from('dues_settlements').select('*').eq('mess_id', messId).order('created_at', { ascending: false }),
+        supabase
+          .from('join_requests')
+          // `user_id` and `decided_by` both reference profiles, so the embed
+          // must name the requester FK or PostgREST answers 300 (ambiguous).
+          .select('*, profile:profiles!join_requests_user_id_fkey(full_name, email, avatar_url)')
+          .eq('mess_id', messId)
+          .order('created_at', { ascending: false }),
       ])
 
       const openCycle = cycles.find((cycle) => cycle.status === 'open') ?? cycles[0] ?? null
@@ -346,7 +378,10 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         members,
         cycles,
         meals: (meals.data ?? []) as DailyMeal[],
-        bazar: (bazar.data ?? []) as BazarExpense[],
+        bazar: rowList(bazar.data).map((row) => ({
+          ...(row as unknown as BazarExpense),
+          items: (row.items_json as string[] | undefined) ?? [],
+        })),
         utilities: (utilities.data ?? []) as FixedUtility[],
         deposits: (deposits.data ?? []) as MemberDeposit[],
         duty,
@@ -358,6 +393,8 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         bans: rowList(banRows.data) as unknown as MessBan[],
         managerTerms: rowList(termRows.data) as unknown as ManagerTerm[],
         depositRequests: rowList(depositRequestRows.data) as unknown as DepositRequest[],
+        settlements: rowList(settlementRows.data) as unknown as DuesSettlement[],
+        joinRequests: rowList(joinRequestRows.data) as unknown as JoinRequest[],
         leaderboard: (
           (leaderboardRows.data ?? []) as {
             id: string
@@ -379,7 +416,7 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       context = null
     },
 
-    async joinMess(code: string) {
+    async joinMess(code: string): Promise<'joined' | 'requested'> {
       const profile = await ensureProfile()
       if (!profile) throw new Error('Not signed in')
 
@@ -399,9 +436,32 @@ export function createSupabaseBackend(url: string, key: string): Backend {
         )
       }
 
-      const { error } = await supabase.rpc('join_mess', { p_code: code.trim().toUpperCase() })
+      const joinCode = code.trim().toUpperCase()
+
+      // With 009 applied, the code only opens a request; an admin approves it.
+      const request = await supabase.rpc('request_join_mess', { p_code: joinCode, p_note: '' })
+      if (!request.error) {
+        context = null
+        const payload = request.data as { status?: string } | null
+        return payload?.status === 'joined' ? 'joined' : 'requested'
+      }
+      if (!/function|schema cache|does not exist|could not find/i.test(request.error.message)) {
+        throw new Error(request.error.message)
+      }
+
+      // A database migrated before 009 still joins straight away.
+      const { error } = await supabase.rpc('join_mess', { p_code: joinCode })
       if (error) throw new Error(error.message)
       context = null
+      return 'joined'
+    },
+
+    async decideJoinRequest(id: string, approve: boolean) {
+      const { error } = await supabase.rpc('decide_join_request', {
+        p_request: id,
+        p_approve: approve,
+      })
+      if (error) throw new Error(error.message)
     },
 
     async updateProfile(patch) {
@@ -473,14 +533,30 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       const cycleId = await requireCycleId()
       const profile = await ensureProfile()
       if (!profile) throw new Error('Not signed in')
-      const { error } = await supabase.from('bazar_expenses').insert({
+      const row: Row = {
         cycle_id: cycleId,
         buyer_id: profile.id,
         amount: input.amount,
         items_summary: input.items,
         expense_date: input.date,
-      })
-      if (error) throw new Error(error.message)
+        items_json: input.itemsList ?? [],
+        proof_path: input.proofPath ?? null,
+      }
+      const { error } = await supabase.from('bazar_expenses').insert(row)
+      if (!error) return
+      // A database before 009 has no receipt or item columns; keep the expense.
+      if (/column|schema cache|does not exist/i.test(error.message)) {
+        const legacy = await supabase.from('bazar_expenses').insert({
+          cycle_id: cycleId,
+          buyer_id: profile.id,
+          amount: input.amount,
+          items_summary: input.items,
+          expense_date: input.date,
+        })
+        if (!legacy.error) return
+        throw new Error(legacy.error.message)
+      }
+      throw new Error(error.message)
     },
 
     async setBazarStatus(id, status) {
@@ -488,8 +564,8 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       if (error) throw new Error(error.message)
     },
 
-    async deleteBazar(id) {
-      const { error } = await supabase.from('bazar_expenses').delete().eq('id', id)
+    async voidBazar(id, reason) {
+      const { error } = await supabase.rpc('void_bazar_expense', { p_expense: id, p_reason: reason })
       if (error) throw new Error(error.message)
     },
 
@@ -507,6 +583,23 @@ export function createSupabaseBackend(url: string, key: string): Backend {
     async deleteUtility(id) {
       const { error } = await supabase.from('fixed_utilities').delete().eq('id', id)
       if (error) throw new Error(error.message)
+    },
+
+    async voidUtility(id, reason) {
+      const rpc = await supabase.rpc('void_utility', { p_utility: id, p_reason: reason })
+      if (!rpc.error) return
+      if (!/function|schema cache|does not exist|could not find/i.test(rpc.error.message)) {
+        throw new Error(rpc.error.message)
+      }
+      const update = await supabase
+        .from('fixed_utilities')
+        .update({ voided_at: new Date().toISOString(), void_reason: reason })
+        .eq('id', id)
+      if (!update.error) return
+      // Last resort on a pre-009 database: remove the row rather than leave a
+      // figure the manager cannot correct.
+      const remove = await supabase.from('fixed_utilities').delete().eq('id', id)
+      if (remove.error) throw new Error(remove.error.message)
     },
 
     async addDeposit(input: DepositInput) {
@@ -555,8 +648,8 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       return data?.signedUrl ?? null
     },
 
-    async deleteDeposit(id) {
-      const { error } = await supabase.from('member_deposits').delete().eq('id', id)
+    async voidDeposit(id, reason) {
+      const { error } = await supabase.rpc('void_deposit', { p_deposit: id, p_reason: reason })
       if (error) throw new Error(error.message)
     },
 
@@ -767,10 +860,140 @@ export function createSupabaseBackend(url: string, key: string): Backend {
       if (error) throw new Error(error.message)
     },
 
-    async deleteAccount() {
-      const { error } = await supabase.rpc('delete_my_account')
+    async setMemberIdentity(patch) {
+      const ctx = await requireContext()
+      const { error } = await supabase.rpc('set_member_identity', {
+        p_display_name: patch.displayName,
+        p_mess: ctx.messId,
+      })
       if (error) throw new Error(error.message)
-      context = null
+      if (patch.avatarUrl !== undefined) {
+        const profile = await ensureProfile()
+        if (!profile) throw new Error('Not signed in')
+        const { error: avatarError } = await supabase
+          .from('mess_members')
+          .update({ avatar_url: patch.avatarUrl })
+          .eq('mess_id', ctx.messId)
+          .eq('user_id', profile.id)
+        if (avatarError) throw new Error(avatarError.message)
+      }
+    },
+
+    async loadLedger(): Promise<LedgerRow[]> {
+      const { data, error } = await supabase.rpc('my_ledger')
+      if (error) throw new Error(error.message)
+      return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+        mess_id: String(row.mess_id),
+        mess_name: String(row.mess_name ?? 'Mess'),
+        currency_symbol: String(row.currency_symbol ?? '৳'),
+        cycle_id: String(row.cycle_id),
+        month_label: String(row.month_label ?? ''),
+        cycle_status: (row.cycle_status as LedgerRow['cycle_status']) ?? 'closed',
+        member_status: (row.member_status as LedgerRow['member_status']) ?? 'left',
+        meals: Number(row.meals ?? 0),
+        meal_cost: Number(row.meal_cost ?? 0),
+        utility_share: Number(row.utility_share ?? 0),
+        payable: Number(row.payable ?? 0),
+        deposits: Number(row.deposits ?? 0),
+        bazar_paid: Number(row.bazar_paid ?? 0),
+        settled_in: Number(row.settled_in ?? 0),
+        settled_out: Number(row.settled_out ?? 0),
+        outstanding: Number(row.outstanding ?? 0),
+      }))
+    },
+
+    async requestSettlement(input: SettlementInput) {
+      const { error } = await supabase.rpc('request_settlement', {
+        p_cycle: input.cycleId,
+        p_amount: input.amount,
+        p_date: input.date,
+        p_method: input.method ?? 'cash',
+        p_reference: input.reference ?? '',
+        p_proof: input.proofPath ?? null,
+        p_note: input.note ?? '',
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async recordSettlement(input: SettlementRecordInput) {
+      const { error } = await supabase.rpc('record_settlement', {
+        p_cycle: input.cycleId,
+        p_user: input.userId,
+        p_amount: input.amount,
+        p_direction: input.direction,
+        p_date: input.date,
+        p_method: input.method ?? 'cash',
+        p_reference: input.reference ?? '',
+        p_proof: input.proofPath ?? null,
+        p_note: input.note ?? '',
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async decideSettlement(id, approve, note = '') {
+      const { error } = await supabase.rpc('decide_settlement', {
+        p_settlement: id,
+        p_approve: approve,
+        p_note: note,
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async cancelSettlement(id) {
+      const { error } = await supabase.rpc('cancel_settlement', { p_settlement: id })
+      if (error) throw new Error(error.message)
+    },
+
+    async loadCycleTotals(cycleId): Promise<CycleTotals | null> {
+      const { data, error } = await supabase.rpc('cycle_totals', { p_cycle: cycleId })
+      // A project that has not run 010 yet keeps using the client calculation.
+      if (error) return null
+      return (data ?? null) as CycleTotals | null
+    },
+
+    async isPlatformAdmin() {
+      const { data, error } = await supabase.rpc('is_platform_admin')
+      if (error) return false
+      return Boolean(data)
+    },
+
+    async loadSupportOverview(): Promise<SupportOverview> {
+      const { data, error } = await supabase.rpc('support_overview')
+      if (error) return { allowed: false, messes: [], errors: [] }
+      return (data ?? { allowed: false, messes: [], errors: [] }) as SupportOverview
+    },
+
+    async setMessPro(input) {
+      const { error } = await supabase.rpc('admin_set_pro', {
+        p_mess: input.messId,
+        p_until: input.until,
+        p_plan: input.plan ?? '',
+        p_reference: input.reference ?? '',
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async savePushSubscription(subscription) {
+      const ctx = await requireContext()
+      const profile = await ensureProfile()
+      if (!profile) throw new Error('Not signed in')
+      const { error } = await supabase.from('push_subscriptions').upsert(
+        {
+          user_id: profile.id,
+          mess_id: ctx.messId,
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+          user_agent: subscription.userAgent ?? '',
+        },
+        { onConflict: 'endpoint' },
+      )
+      if (error) throw new Error(error.message)
+    },
+
+    async removePushSubscription(endpoint) {
+      const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
+      if (error) throw new Error(error.message)
     },
 
     async loadClientErrors() {

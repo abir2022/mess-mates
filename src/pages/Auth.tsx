@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   BarChart3,
@@ -13,7 +14,8 @@ import {
   Vote,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { Button, Modal, Pill } from '../components/ui'
+import { Button, Pill } from '../components/ui'
+import { LedgerPanel } from '../components/LedgerPanel'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { useI18n } from '../lib/i18n'
 
@@ -84,7 +86,10 @@ export function AuthScreen() {
 
       <section className="order-1 flex items-center justify-center px-4 py-6 md:order-2 md:px-10 md:py-10">
         <div className="w-full max-w-sm">
-          <div className="mb-3 flex justify-end">
+          <div className="mb-3 flex items-center justify-between">
+            <Link to="/" className="text-[11px] font-bold text-ink-400 transition hover:text-brand-700">
+              ← Mess Mates
+            </Link>
             <LanguageToggle />
           </div>
           <div className="card p-6">
@@ -163,6 +168,15 @@ export function AuthScreen() {
           <p className="mt-4 text-center text-[11px] text-ink-400">
             {t('auth.footer')}
           </p>
+          <p className="mt-1 text-center text-[11px] font-semibold">
+            <Link to="/privacy" className="text-brand-700 hover:text-brand-800">
+              {t('legal.privacyTitle')}
+            </Link>
+            <span className="mx-1.5 text-ink-300">·</span>
+            <Link to="/terms" className="text-brand-700 hover:text-brand-800">
+              {t('legal.termsTitle')}
+            </Link>
+          </p>
         </div>
       </section>
     </div>
@@ -187,23 +201,6 @@ export function OnboardingScreen() {
   const [name, setName] = useState('')
   const [currency, setCurrency] = useState('৳')
   const [code, setCode] = useState('')
-  const [deleting, setDeleting] = useState(false)
-  const [deleteBusy, setDeleteBusy] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-
-  const deleteAccount = async () => {
-    setDeleteBusy(true)
-    setDeleteError(null)
-    try {
-      await backend.deleteAccount()
-      await signOut()
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Could not delete the account.')
-    } finally {
-      setDeleteBusy(false)
-    }
-  }
-
   return (
     <div className="min-h-dvh bg-ink-50">
       <div className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-8">
@@ -318,6 +315,7 @@ export function OnboardingScreen() {
               >
                 {t('auth.joinBtn')} <ChevronRight className="h-4 w-4" />
               </Button>
+              <p className="text-[10px] leading-relaxed text-ink-400">{t('hub.joinRequestsHint')}</p>
               {backend.mode === 'demo' ? (
                 <p className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] text-ink-500">
                   {t('auth.demoCode')} <span className="font-mono font-bold">MM7K2Q</span>
@@ -332,41 +330,15 @@ export function OnboardingScreen() {
             </div>
           ) : null}
 
-          {/* Leaving a mess makes this screen the only place the member still
-              sees, so account deletion has to live here once the admin has
-              approved their leave request. */}
-          <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-ink-200 px-3 py-2.5">
-            <p className="text-[10px] leading-relaxed text-ink-400">{t('hub.accountDeleteNote')}</p>
-            <button
-              onClick={() => setDeleting(true)}
-              className="shrink-0 text-[10px] font-bold text-rose-500 hover:text-rose-600"
-            >
-              {t('gov.requestDeletion')}
-            </button>
+          {/* This screen is the only one a member sees between messes, so
+              their own ledger has to live here: the months they left behind
+              stay readable to them (and to that mess) for good. */}
+          <div className="md:col-span-2 rounded-2xl border border-ink-100 bg-white p-4">
+            <LedgerPanel compact />
           </div>
         </div>
       </div>
 
-      <Modal
-        open={deleting}
-        onClose={() => setDeleting(false)}
-        title={t('gov.deleteTitle')}
-        footer={
-          <div className="flex gap-2">
-            <Button variant="secondary" className="flex-1" onClick={() => setDeleting(false)}>
-              {t('hub.cancel')}
-            </Button>
-            <Button className="flex-1" variant="danger" loading={deleteBusy} onClick={deleteAccount}>
-              {t('gov.requestDeletion')}
-            </Button>
-          </div>
-        }
-      >
-        <p className="text-xs leading-relaxed text-ink-500">{t('gov.deleteBody')}</p>
-        {deleteError ? (
-          <p className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-600">{deleteError}</p>
-        ) : null}
-      </Modal>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import {
   CalendarDays,
   Check,
@@ -16,13 +16,16 @@ import {
   X,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { Avatar, Button, EmptyState, Pill, SectionHeading, Stepper, Tabs } from '../components/ui'
+import { Avatar, Button, EmptyState, Modal, Pill, SectionHeading, Stepper, Tabs } from '../components/ui'
 import { depositMethods } from '../lib/backend'
 import { isMealLocked, mealTotal } from '../lib/calc'
 import { myDepositRequests, pendingDepositRequests } from '../lib/governance'
+import { memberAvatar, memberName } from '../lib/ledger'
+import { SettlementCard } from '../components/SettlementCard'
+import { StandingPlanCard } from '../components/StandingPlan'
 import { useI18n, type MessageKey } from '../lib/i18n'
-import { addDays, money, shortDate, todayISO, weekdayShort } from '../lib/format'
-import type { DepositMethod, MealField } from '../lib/types'
+import { addDays, formatMeals, money, shortDate, todayISO, weekdayShort } from '../lib/format'
+import type { BazarExpense, DepositMethod, FixedUtility, MealField, MemberDeposit } from '../lib/types'
 
 const MAX_PROOF_BYTES = 2 * 1024 * 1024
 
@@ -125,6 +128,8 @@ export function MealsBazar() {
 
       {tab === 'meals' ? (
         <div className="space-y-4">
+          <StandingPlanCard />
+
           <div className="card flex flex-wrap items-center justify-between gap-3 p-3">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               <button
@@ -176,7 +181,7 @@ export function MealsBazar() {
               </Pill>
               <span className="text-xs font-semibold text-ink-500">
                 {weekdayShort(date)} ·{' '}
-                <span className="font-extrabold text-ink-800">{t('meals.count', { count: dayTotal.toFixed(1) })}</span>
+                <span className="font-extrabold text-ink-800">{t('meals.count', { count: formatMeals(dayTotal) })}</span>
               </span>
             </div>
           </div>
@@ -205,7 +210,7 @@ export function MealsBazar() {
                       {weekdayShort(day).slice(0, 2)}
                     </span>
                     <span className="text-xs font-extrabold tabular-nums">
-                      {total ? total.toFixed(1).replace(/\.0$/, '') : '—'}
+                      {total ? formatMeals(total).replace(/\.0$/, '') : '—'}
                     </span>
                   </button>
                 )
@@ -229,15 +234,15 @@ export function MealsBazar() {
                 <div key={member.user_id} className={`p-4 ${isMe ? 'bg-brand-50/30' : ''}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5">
-                      <Avatar name={member.profile.full_name} url={member.profile.avatar_url} frame={member.profile.avatar_frame} size="sm" />
+                      <Avatar name={memberName(member)} url={memberAvatar(member)} frame={member.profile.avatar_frame} size="sm" />
                       <div>
                         <p className="text-xs font-bold text-ink-900">
-                          {member.profile.full_name} {isMe ? <span className="text-brand-600">{t('dash.you')}</span> : null}
+                          {memberName(member)} {isMe ? <span className="text-brand-600">{t('dash.you')}</span> : null}
                         </p>
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{t(`role.${member.role}`)}</p>
                       </div>
                     </div>
-                    <Pill tone="brand">{t('meals.count', { count: rowTotal.toFixed(1) })}</Pill>
+                    <Pill tone="brand">{t('meals.count', { count: formatMeals(rowTotal) })}</Pill>
                   </div>
 
                   <div className="mt-3 grid grid-cols-1 gap-1.5 xs:grid-cols-2 xl:grid-cols-4">
@@ -281,26 +286,60 @@ function BazarTab() {
   const { t } = useI18n()
   const [amount, setAmount] = useState('')
   const [items, setItems] = useState('')
+  const [itemList, setItemList] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [fileKey, setFileKey] = useState(0)
   const [date, setDate] = useState(todayISO())
+  const [voidTarget, setVoidTarget] = useState<BazarExpense | null>(null)
 
   if (!ws || !user || !cycle) return null
   const symbol = ws.mess.currency_symbol
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
-  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const nameOf = (id: string) => memberName(ws.members.find((member) => member.user_id === id))
   const entries = ws.bazar
     .filter((entry) => entry.cycle_id === cycle.id)
     .sort((a, b) => b.expense_date.localeCompare(a.expense_date))
   const approved = entries.filter((entry) => entry.status === 'approved').reduce((sum, entry) => sum + Number(entry.amount), 0)
   const pending = entries.filter((entry) => entry.status === 'pending').reduce((sum, entry) => sum + Number(entry.amount), 0)
 
+  const openProof = (path: string) => {
+    run(async () => {
+      const url = await backend.depositProofUrl(path)
+      if (!url) throw new Error(t('meals.proofGone'))
+      window.open(url, '_blank', 'noopener,noreferrer')
+    })
+  }
+
   const submit = async () => {
     const value = Number(amount)
     if (!value || value <= 0 || !items.trim()) return
-    const ok = await run(() => backend.addBazar({ amount: value, items: items.trim(), date }), 'Bazar expense submitted')
+    if (file && file.size > MAX_PROOF_BYTES) {
+      await run(async () => {
+        throw new Error(t('meals.tooLarge'))
+      })
+      return
+    }
+    const lines = itemList
+      .split(/\n|,/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    const ok = await run(async () => {
+      const proofPath = file ? await backend.uploadDepositProof(file) : null
+      await backend.addBazar({
+        amount: value,
+        items: items.trim(),
+        date,
+        itemsList: lines,
+        proofPath,
+      })
+    }, 'Bazar expense submitted')
     if (ok) {
       setAmount('')
       setItems('')
+      setItemList('')
+      setFile(null)
+      setFileKey((key) => key + 1)
     }
   }
 
@@ -333,6 +372,29 @@ function BazarTab() {
               value={items}
               onChange={(event) => setItems(event.target.value)}
             />
+          </div>
+          <div>
+            <label className="label">{t('meals.itemsList')}</label>
+            <textarea
+              className="field min-h-[64px] resize-none"
+              placeholder={t('meals.itemsListHint')}
+              value={itemList}
+              onChange={(event) => setItemList(event.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">{t('meals.receiptBazar')}</label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-ink-200 bg-ink-50/60 px-3 py-2 text-[11px] font-semibold text-ink-500 hover:border-brand-300">
+              <Paperclip className="h-3.5 w-3.5" />
+              <span className="truncate">{file ? file.name : t('meals.attach')}</span>
+              <input
+                key={fileKey}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
+                className="hidden"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+            </label>
           </div>
           <div>
             <label className="label">{t('meals.expenseDate')}</label>
@@ -372,6 +434,26 @@ function BazarTab() {
                   <p className="mt-0.5 text-[11px] text-ink-500">
                     {nameOf(entry.buyer_id)} · {shortDate(entry.expense_date)}
                   </p>
+                  {entry.items?.length ? (
+                    <ul className="mt-1 flex flex-wrap gap-1">
+                      {entry.items.map((item) => (
+                        <li
+                          key={item}
+                          className="rounded-full bg-ink-50 px-2 py-0.5 text-[10px] font-semibold text-ink-600 ring-1 ring-ink-100"
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {entry.proof_path ? (
+                    <button
+                      onClick={() => openProof(entry.proof_path as string)}
+                      className="mt-1 inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 hover:bg-brand-100"
+                    >
+                      <Paperclip className="h-3 w-3" /> {t('meals.viewReceipt')}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(Number(entry.amount), symbol)}</p>
@@ -390,7 +472,7 @@ function BazarTab() {
                     ) : null}
                     {canManage || entry.buyer_id === user.id ? (
                       <button
-                        onClick={() => run(() => backend.deleteBazar(entry.id), 'Expense removed')}
+                        onClick={() => setVoidTarget(entry)}
                         className="rounded-md p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
                         title={t('meals.delete')}
                       >
@@ -404,6 +486,22 @@ function BazarTab() {
           )}
         </div>
       </div>
+
+      <VoidModal
+        key={voidTarget?.id ?? 'none'}
+        open={Boolean(voidTarget)}
+        entry={`${voidTarget?.items_summary ?? ''} · ${money(Number(voidTarget?.amount ?? 0), symbol)}`}
+        busy={busy}
+        onClose={() => setVoidTarget(null)}
+        onConfirm={(reason) => {
+          if (!voidTarget) return
+          void run(() => backend.voidBazar(voidTarget.id, reason), t('ledger.voidedDone')).then(
+            (ok) => {
+              if (ok) setVoidTarget(null)
+            },
+          )
+        }}
+      />
     </div>
   )
 }
@@ -413,13 +511,16 @@ function UtilitiesTab() {
   const { t } = useI18n()
   const [title, setTitle] = useState('')
   const [amount, setAmount] = useState('')
+  const [voidTarget, setVoidTarget] = useState<FixedUtility | null>(null)
 
   if (!ws || !user || !cycle || !settlement) return null
   const symbol = ws.mess.currency_symbol
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
   const entries = ws.utilities.filter((entry) => entry.cycle_id === cycle.id)
-  const total = entries.reduce((sum, entry) => sum + Number(entry.total_amount), 0)
+  const total = entries
+    .filter((entry) => !entry.voided_at)
+    .reduce((sum, entry) => sum + Number(entry.total_amount), 0)
 
   const add = async () => {
     const value = Number(amount)
@@ -492,17 +593,25 @@ function UtilitiesTab() {
           ) : (
             entries.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 p-3.5">
-                <div>
-                  <p className="text-xs font-bold text-ink-900">{entry.title}</p>
+                <div className="min-w-0">
+                  <p className={`text-xs font-bold ${entry.voided_at ? 'text-ink-400 line-through' : 'text-ink-900'}`}>
+                    {entry.title}
+                    {entry.voided_at ? (
+                      <span className="ml-1 text-[10px] font-semibold text-rose-500">{t('meals.voided')}</span>
+                    ) : null}
+                  </p>
                   <p className="text-[11px] text-ink-500">
                     {t('meals.splitLine', { type: entry.split_type, count: settlement.memberCount })}
                   </p>
+                  {entry.voided_at && entry.void_reason ? (
+                    <p className="text-[10px] font-semibold text-rose-500">{entry.void_reason}</p>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(Number(entry.total_amount), symbol)}</p>
-                  {canManage ? (
+                  {canManage && !entry.voided_at ? (
                     <button
-                      onClick={() => run(() => backend.deleteUtility(entry.id), 'Utility removed')}
+                      onClick={() => setVoidTarget(entry)}
                       className="rounded-md p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
                       title={t('meals.delete')}
                     >
@@ -515,6 +624,22 @@ function UtilitiesTab() {
           )}
         </div>
       </div>
+
+      <VoidModal
+        key={voidTarget?.id ?? 'none'}
+        open={Boolean(voidTarget)}
+        entry={`${voidTarget?.title ?? ''} · ${money(Number(voidTarget?.total_amount ?? 0), symbol)}`}
+        busy={busy}
+        onClose={() => setVoidTarget(null)}
+        onConfirm={(reason) => {
+          if (!voidTarget) return
+          void run(() => backend.voidUtility(voidTarget.id, reason), t('meals.voidUtilityDone')).then(
+            (ok) => {
+              if (ok) setVoidTarget(null)
+            },
+          )
+        }}
+      />
     </div>
   )
 }
@@ -530,6 +655,7 @@ function DepositsTab() {
   const [note, setNote] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
+  const [voidTarget, setVoidTarget] = useState<MemberDeposit | null>(null)
 
   if (!ws || !user || !cycle) return null
   const symbol = ws.mess.currency_symbol
@@ -539,11 +665,13 @@ function DepositsTab() {
   const members = ws.members.filter((member) => member.status === 'active')
   // Past deposits still belong to members who have left, so look them up in the
   // whole roster: a settled month must never show "Member" instead of a name.
-  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const nameOf = (id: string) => memberName(ws.members.find((member) => member.user_id === id))
   const entries = ws.deposits
     .filter((entry) => entry.cycle_id === cycle.id)
     .sort((a, b) => b.paid_date.localeCompare(a.paid_date))
-  const total = entries.reduce((sum, entry) => sum + Number(entry.amount), 0)
+  const total = entries
+    .filter((entry) => !entry.voided_at)
+    .reduce((sum, entry) => sum + Number(entry.amount), 0)
   const waitingApproval = pendingDepositRequests(ws.depositRequests, cycle.id)
   const myWaiting = myDepositRequests(ws.depositRequests, cycle.id, user.id).filter(
     (request) => request.status === 'pending',
@@ -614,7 +742,7 @@ function DepositsTab() {
             <select className="field" value={userId} onChange={(event) => setUserId(event.target.value)} disabled={!canManage}>
               {members.map((member) => (
                 <option key={member.user_id} value={member.user_id}>
-                  {member.profile.full_name} {member.user_id === user.id ? t('dash.you') : ''}
+                  {memberName(member)} {member.user_id === user.id ? t('dash.you') : ''}
                 </option>
               ))}
             </select>
@@ -701,6 +829,8 @@ function DepositsTab() {
       </div>
 
       <div className="space-y-3">
+        <SettlementCard />
+
         {approvalRows.length ? (
           <div className="card overflow-hidden">
             <div className="border-b border-ink-100 bg-amber-50/60 px-4 py-3">
@@ -775,12 +905,20 @@ function DepositsTab() {
           entries.map((entry) => (
             <div key={entry.id} className="flex items-center justify-between gap-3 p-3.5">
               <div className="min-w-0">
-                <p className="text-xs font-bold text-ink-900">{nameOf(entry.user_id)}</p>
+                <p className="text-xs font-bold text-ink-900">
+                  <span className={entry.voided_at ? 'text-ink-400 line-through' : ''}>{nameOf(entry.user_id)}</span>
+                  {entry.voided_at ? (
+                    <span className="ml-1 text-[10px] font-semibold text-rose-500">{t('ledger.voided')}</span>
+                  ) : null}
+                </p>
                 <p className="text-[11px] text-ink-500">
                   {shortDate(entry.paid_date)} · {depositMethods.find((item) => item.id === entry.method)?.label ?? 'Cash'}
                   {entry.reference ? ` · ${entry.reference}` : ''}
                   {entry.note ? ` · ${entry.note}` : ''}
                 </p>
+                {entry.voided_at && entry.void_reason ? (
+                  <p className="text-[10px] font-semibold text-rose-500">{entry.void_reason}</p>
+                ) : null}
                 {entry.proof_path ? (
                   <button
                     onClick={() => openProof(entry.proof_path as string)}
@@ -792,9 +930,9 @@ function DepositsTab() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <p className="text-sm font-extrabold tabular-nums text-emerald-700">{money(Number(entry.amount), symbol)}</p>
-                {canManage || entry.user_id === user.id ? (
+                {!entry.voided_at && (canManage || entry.user_id === user.id) ? (
                   <button
-                    onClick={() => run(() => backend.deleteDeposit(entry.id), 'Deposit removed')}
+                    onClick={() => setVoidTarget(entry)}
                     className="rounded-md p-1 text-ink-400 hover:bg-rose-50 hover:text-rose-500"
                     title={t('meals.delete')}
                   >
@@ -807,6 +945,77 @@ function DepositsTab() {
         )}
       </div>
       </div>
+
+      <VoidModal
+        key={voidTarget?.id ?? 'none'}
+        open={Boolean(voidTarget)}
+        entry={`${nameOf(voidTarget?.user_id ?? '')} · ${money(Number(voidTarget?.amount ?? 0), symbol)}`}
+        busy={busy}
+        onClose={() => setVoidTarget(null)}
+        onConfirm={(reason) => {
+          if (!voidTarget) return
+          void run(() => backend.voidDeposit(voidTarget.id, reason), t('ledger.voidedDone')).then(
+            (ok) => {
+              if (ok) setVoidTarget(null)
+            },
+          )
+        }}
+      />
     </div>
+  )
+}
+
+/** A required reason, in the app's own sheet instead of a native prompt. */
+function VoidModal({
+  open,
+  entry,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  entry: string
+  busy: boolean
+  onClose: () => void
+  onConfirm: (reason: string) => void
+}) {
+  const { t } = useI18n()
+  const [reason, setReason] = useState('')
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t('meals.voidTitle')}
+      subtitle={t('meals.voidBody')}
+      footer={
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            disabled={reason.trim().length < 3 || busy}
+            loading={busy}
+            onClick={() => onConfirm(reason.trim())}
+          >
+            {t('meals.voidConfirm')}
+          </Button>
+        </div>
+      }
+    >
+      <p className="rounded-xl bg-ink-50 px-3 py-2 text-xs font-semibold text-ink-700">{entry}</p>
+      <label className="label mt-3">
+        {t('meals.voidReason')} *
+      </label>
+      <textarea
+        className="field min-h-[90px] resize-none"
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder={t('meals.voidReasonPlaceholder')}
+        autoFocus
+      />
+      <p className="mt-1 text-[10px] leading-relaxed text-ink-400">{t('ledger.voidPrompt')}</p>
+    </Modal>
   )
 }

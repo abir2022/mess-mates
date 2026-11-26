@@ -1,4 +1,6 @@
 import type { Workspace } from './types'
+import { memberAvatar, memberName } from './ledger'
+import { dhakaDate, dhakaHour } from './format'
 
 export interface MemberSettlement {
   userId: string
@@ -16,6 +18,10 @@ export interface MemberSettlement {
   payable: number
   deposits: number
   bazarPaid: number
+  /** Approved payments this member sent to the mess for this month. */
+  settledIn: number
+  /** Approved payments the mess sent back to this member for this month. */
+  settledOut: number
   /** Net balance carried in from earlier months: negative means an unpaid due. */
   carriedBalance: number
   balance: number
@@ -30,6 +36,10 @@ export interface Settlement {
   totalUtilities: number
   utilityShare: number
   totalDeposits: number
+  /** Approved members→mess payments counted in this month's balances. */
+  totalSettledIn: number
+  /** Approved mess→members payments counted in this month's balances. */
+  totalSettledOut: number
   totalPayable: number
   memberCount: number
   members: MemberSettlement[]
@@ -76,15 +86,27 @@ export function computeSettlement(workspace: Workspace, cycleId: string, options
   const activeMembers = workspace.members.filter((member) => member.status === 'active')
   const meals = workspace.meals.filter((meal) => meal.cycle_id === cycleId)
   const bazar = workspace.bazar.filter((expense) => expense.cycle_id === cycleId)
-  const utilities = workspace.utilities.filter((utility) => utility.cycle_id === cycleId)
+  const utilities = workspace.utilities.filter(
+    (utility) => utility.cycle_id === cycleId && !utility.voided_at,
+  )
   const deposits = workspace.deposits.filter((deposit) => deposit.cycle_id === cycleId)
+  // A closed month keeps its figures, so late money arrives as an approved
+  // settlement beside it. Those payments are real money and must move the
+  // balance, otherwise a settled due would still be shown (and carried) as due.
+  const settlements = (workspace.settlements ?? []).filter(
+    (row) => row.cycle_id === cycleId && row.status === 'approved',
+  )
   const carried = options.carryForward === false ? new Map<string, number>() : carriedBalances(workspace, cycleId)
 
   const totalBazar = round2(
-    bazar.filter((expense) => expense.status === 'approved').reduce((sum, expense) => sum + Number(expense.amount), 0),
+    bazar
+      .filter((expense) => expense.status === 'approved' && !expense.voided_at)
+      .reduce((sum, expense) => sum + Number(expense.amount), 0),
   )
   const pendingBazar = round2(
-    bazar.filter((expense) => expense.status === 'pending').reduce((sum, expense) => sum + Number(expense.amount), 0),
+    bazar
+      .filter((expense) => expense.status === 'pending' && !expense.voided_at)
+      .reduce((sum, expense) => sum + Number(expense.amount), 0),
   )
   const totalMeals = round2(
     meals.reduce(
@@ -93,7 +115,26 @@ export function computeSettlement(workspace: Workspace, cycleId: string, options
     ),
   )
   const totalUtilities = round2(utilities.reduce((sum, utility) => sum + Number(utility.total_amount), 0))
-  const totalDeposits = round2(deposits.reduce((sum, deposit) => sum + Number(deposit.amount), 0))
+  const totalDeposits = round2(
+    deposits.filter((deposit) => !deposit.voided_at).reduce((sum, deposit) => sum + Number(deposit.amount), 0),
+  )
+
+  const settledFor = (userId: string, direction: 'member_to_mess' | 'mess_to_member') =>
+    round2(
+      settlements
+        .filter((row) => row.user_id === userId && row.direction === direction)
+        .reduce((sum, row) => sum + Number(row.amount), 0),
+    )
+  const totalSettledIn = round2(
+    settlements
+      .filter((row) => row.direction === 'member_to_mess')
+      .reduce((sum, row) => sum + Number(row.amount), 0),
+  )
+  const totalSettledOut = round2(
+    settlements
+      .filter((row) => row.direction === 'mess_to_member')
+      .reduce((sum, row) => sum + Number(row.amount), 0),
+  )
 
   const memberCount = Math.max(activeMembers.length, 1)
   const mealRate = totalMeals > 0 ? round2(totalBazar / totalMeals) : 0
@@ -109,19 +150,23 @@ export function computeSettlement(workspace: Workspace, cycleId: string, options
     const mealCost = round2(totalMealsForMember * mealRate)
     const payable = round2(mealCost + utilityShare)
     const memberDeposits = round2(
-      deposits.filter((deposit) => deposit.user_id === member.user_id).reduce((sum, deposit) => sum + Number(deposit.amount), 0),
+      deposits
+        .filter((deposit) => deposit.user_id === member.user_id && !deposit.voided_at)
+        .reduce((sum, deposit) => sum + Number(deposit.amount), 0),
     )
     const bazarPaid = round2(
       bazar
-        .filter((expense) => expense.buyer_id === member.user_id && expense.status === 'approved')
+        .filter((expense) => expense.buyer_id === member.user_id && expense.status === 'approved' && !expense.voided_at)
         .reduce((sum, expense) => sum + Number(expense.amount), 0),
     )
+    const settledIn = settledFor(member.user_id, 'member_to_mess')
+    const settledOut = settledFor(member.user_id, 'mess_to_member')
     const carriedBalance = round2(carried.get(member.user_id) ?? 0)
-    const balance = round2(memberDeposits + carriedBalance - payable)
+    const balance = round2(memberDeposits + settledIn - settledOut + carriedBalance - payable)
     return {
       userId: member.user_id,
-      name: member.profile.full_name || 'Member',
-      avatarUrl: member.profile.avatar_url,
+      name: memberName(member),
+      avatarUrl: memberAvatar(member),
       frame: member.profile.avatar_frame,
       role: member.role,
       meals: totalMealsForMember,
@@ -134,6 +179,8 @@ export function computeSettlement(workspace: Workspace, cycleId: string, options
       payable,
       deposits: memberDeposits,
       bazarPaid,
+      settledIn,
+      settledOut,
       carriedBalance,
       balance,
     }
@@ -153,6 +200,8 @@ export function computeSettlement(workspace: Workspace, cycleId: string, options
     totalUtilities,
     utilityShare,
     totalDeposits,
+    totalSettledIn,
+    totalSettledOut,
     totalPayable: round2(members.reduce((sum, member) => sum + member.payable, 0)),
     memberCount,
     members: [...members].sort((a, b) => a.name.localeCompare(b.name)),
@@ -227,13 +276,42 @@ export function settleUpPlan(settlement: Settlement): Transfer[] {
   return transfers
 }
 
+export type SettleUpKind = 'transfers' | 'owed_to_mess' | 'mess_owes_members' | 'settled'
+
+export interface SettleUpState {
+  kind: SettleUpKind
+  /** The money the state is about: what moves between members, or what is owed one way. */
+  amount: number
+}
+
+/**
+ * What the month actually needs, in plain words.
+ *
+ * "No transfers" is not the same as "everyone is settled": a mess that simply
+ * collected less than it spent has neither debtors nor creditors to match, and
+ * every member still owes the fund. Saying "everyone is settled up" there is a
+ * lie the manager would catch on the first WhatsApp message.
+ */
+export function settleUpState(settlement: Settlement): SettleUpState {
+  const hasDebtors = settlement.members.some((member) => member.balance < -0.005)
+  const hasCreditors = settlement.members.some((member) => member.balance > 0.005)
+
+  if (hasDebtors && hasCreditors) {
+    return {
+      kind: 'transfers',
+      amount: round2(settleUpPlan(settlement).reduce((sum, transfer) => sum + transfer.amount, 0)),
+    }
+  }
+  if (settlement.due > 0.005) return { kind: 'owed_to_mess', amount: settlement.due }
+  if (settlement.refundable > 0.005) return { kind: 'mess_owes_members', amount: settlement.refundable }
+  return { kind: 'settled', amount: 0 }
+}
+
 export function isMealLocked(lockHour: number, dateISO: string, role: string): boolean {
   if (role === 'admin' || role === 'manager') return false
-  const today = new Date()
-  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-    today.getDate(),
-  ).padStart(2, '0')}`
+  // The mess lives in Dhaka even when the member's phone does not.
+  const todayIso = dhakaDate()
   if (dateISO < todayIso) return true
   if (dateISO > todayIso) return false
-  return today.getHours() >= lockHour
+  return dhakaHour() >= lockHour
 }

@@ -8,7 +8,9 @@ product, data model, financial formulas, security model and deployment.
 
 ```bash
 npm run typecheck   # tsc --noEmit
-bun test            # 8 files, 67 tests
+npm run lint        # eslint .
+bun test            # 12 files, 103 tests
+bun audit --audit-level=high
 npm run build       # tsc + vite build
 npm run dev         # 127.0.0.1:5273
 ```
@@ -41,11 +43,22 @@ layout or styling work instead of improvising:
 - **One system:** reuse the `brand` / `ink` / `flame` tokens and the `.card`, `.field`, `.label`,
   `.chip` classes. No new palette, no gradient washes for decoration, no icon-only control without
   an accessible label.
-- **Money and i18n:** always format with `money()` from `src/lib/format.ts`; every new string needs
-  an EN **and** BN entry in `src/lib/i18n.ts` (the test suite enforces parity of keys).
+- **Money, dates and i18n:** always format with `money()` / `formatMeals()` from
+  `src/lib/format.ts`; “today” is `todayISO()` (Asia/Dhaka), never `new Date()` arithmetic. Every new
+  string needs an EN **and** BN entry in `src/lib/i18n.ts` (the type system enforces parity). Numeric
+  `t()` placeholders localise automatically.
+- **Theme:** use the existing tokens and `.card` / `.field` / `.label` classes; dark mode is a remap in
+  `index.css`, so a new hard-coded colour needs a dark equivalent there. No raw hex in components.
 - Never commit `.env`, service-role keys or `client_secret_*.json`.
+
+## Database changes
+
+Migrations are append-only: add `00N_name.sql`, keep it idempotent, and update `PROJECT.md` §10. The
+client must still work before the migration is applied (feature-detect the RPC/column and fall back),
+because the live project is updated by hand.
 
 ## Done means
 
-`npm run typecheck` and `npm run build` pass. Update `PROJECT.md` when you add a feature, change
-setup, or change the design system.
+`npm run typecheck`, `npm run lint`, `bun test` and `npm run build` pass, and `bun audit
+--audit-level=high` is clean. Update `PROJECT.md` when you add a feature, change setup, or change the
+design system.

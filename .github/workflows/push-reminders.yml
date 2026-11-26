@@ -1,0 +1,35 @@
+name: Push reminders
+
+on:
+  schedule:
+    # 07:30 and 21:00 Asia/Dhaka (UTC+6).
+    - cron: '30 1 * * *'
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: push-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    name: Send the day's reminders
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call send-push
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          PUSH_TRIGGER_SECRET: ${{ secrets.PUSH_TRIGGER_SECRET }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$PUSH_TRIGGER_SECRET" ]; then
+            echo "SUPABASE_URL or PUSH_TRIGGER_SECRET is not configured; skipping."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST "$SUPABASE_URL/functions/v1/send-push" \
+            -H "Authorization: Bearer $PUSH_TRIGGER_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{"mode":"reminders"}'

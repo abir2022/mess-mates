@@ -13,6 +13,8 @@ import {
 import { useApp } from '../context/AppContext'
 import { Button, Pill } from './ui'
 import { buildReminders, duesReminderText, type ReminderKind } from '../lib/reminders'
+import { showDeviceNotification } from '../lib/notify'
+import { currentPushSubscription, enablePush, pushConfigured } from '../lib/push'
 import { money, todayISO } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 
@@ -34,24 +36,31 @@ const tones: Record<ReminderKind, string> = {
 
 const NOTIFIED_KEY = 'mm_reminders_notified_v1'
 
-function notifyOnce(title: string, body: string) {
+async function notifyOnce(title: string, body: string) {
   try {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     const today = todayISO()
     if (localStorage.getItem(NOTIFIED_KEY) === today) return
-    new Notification(title, { body, icon: '/logo.png', tag: 'mess-mates-reminders' })
-    localStorage.setItem(NOTIFIED_KEY, today)
+    const shown = await showDeviceNotification(title, body)
+    if (shown) localStorage.setItem(NOTIFIED_KEY, today)
   } catch {
     // Notifications are a bonus; never break the dashboard over them.
   }
 }
 
 export function ReminderCenter() {
-  const { ws, settlement, user } = useApp()
+  const { ws, settlement, user, backend } = useApp()
   const { t } = useI18n()
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() =>
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   )
+  const [pushOn, setPushOn] = useState(false)
+  const [pushError, setPushError] = useState(false)
+
+  useEffect(() => {
+    if (!pushConfigured() || permission !== 'granted') return
+    void currentPushSubscription().then((subscription) => setPushOn(Boolean(subscription)))
+  }, [permission])
 
   const canManage = useMemo(() => {
     const role = ws?.members.find((member) => member.user_id === user?.id)?.role ?? 'member'
@@ -77,7 +86,7 @@ export function ReminderCenter() {
   useEffect(() => {
     if (!reminders.length) return
     const urgent = reminders.filter((reminder) => reminder.tone === 'danger').length
-    notifyOnce(
+    void notifyOnce(
       urgent ? `${urgent} · ${t('rem.title')}` : `Mess Mates · ${t('rem.title')}`,
       reminders.map((reminder) => reminder.title).join(' · '),
     )
@@ -93,14 +102,27 @@ export function ReminderCenter() {
       const result = await Notification.requestPermission()
       setPermission(result)
       if (result === 'granted') {
-        new Notification('Device reminders on', {
-          body: 'Mess Mates will nudge you once a day when something needs attention.',
-          icon: '/logo.png',
-        })
+        if (pushConfigured()) {
+          const pushed = await enablePush(backend)
+          setPushOn(pushed === 'granted')
+          setPushError(pushed === 'failed')
+        }
+        await showDeviceNotification(
+          t('rem.enabled'),
+          t('rem.enabledBody'),
+          'mess-mates-enabled',
+        )
       }
     } catch {
       setPermission(Notification.permission)
     }
+  }
+
+  const requestPush = async () => {
+    setPushError(false)
+    const result = await enablePush(backend)
+    setPushOn(result === 'granted')
+    setPushError(result === 'failed')
   }
 
   return (
@@ -163,13 +185,24 @@ export function ReminderCenter() {
           <Button size="sm" variant="secondary" onClick={() => void requestNotifications()}>
             <BellRing className="h-3.5 w-3.5" /> {t('rem.enableAlerts')}
           </Button>
+        ) : permission === 'granted' ? (
+          pushOn ? (
+            <span className="text-[10px] font-semibold text-emerald-700">{t('rem.pushOn')}</span>
+          ) : pushConfigured() ? (
+            <span className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => void requestPush()}>
+                <BellRing className="h-3.5 w-3.5" /> {t('rem.enablePush')}
+              </Button>
+              {pushError ? (
+                <span className="text-[10px] font-semibold text-rose-500">{t('rem.pushFailed')}</span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="text-[10px] font-semibold text-ink-400">{t('rem.alertsOn')}</span>
+          )
         ) : (
           <span className="text-[10px] font-semibold text-ink-400">
-            {permission === 'granted'
-              ? t('rem.alertsOn')
-              : permission === 'denied'
-                ? t('rem.alertsBlocked')
-                : t('rem.alertsUnsupported')}
+            {permission === 'denied' ? t('rem.alertsBlocked') : t('rem.alertsUnsupported')}
           </span>
         )}
       </div>

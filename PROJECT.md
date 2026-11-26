@@ -2,7 +2,7 @@
 
 > The single source of truth for engineers taking over this project: what it is, how it is built, how the pieces fit, how to run and deploy it, and what is still missing.
 >
-> Last audited: **24 November 2026** · App version **1.0.0** · Status: **live on Vercel + Supabase, pre-revenue**
+> Last audited: **26 November 2026** · App version **1.0.0** · Status: **live on Vercel + Supabase, pre-revenue**
 
 ---
 
@@ -442,7 +442,13 @@ You need a Supabase account and project. The existing project ref is `eyzjjtyujy
    2. `supabase/migrations/002_hardening.sql` — deposit payment columns, cycle/meal lock triggers, `deposit-proofs` bucket + policies.
    3. `supabase/migrations/003_fix_signup.sql` — signup error log, profile schema repair, non-blocking profile trigger.
    4. `supabase/migrations/004_roles_and_members.sql` — `set_member_role`, `remove_mess_member`, `leave_mess`.
-   > **Current live project:** 004 must still be run once in the SQL Editor. Until then live role changes, member removal and "Leave this mess" fail with a missing-function error.
+   5. `supabase/migrations/005_realtime.sql` — realtime publication for the workspace tables.
+   6. `supabase/migrations/006_pro_entitlement.sql` — Pro flag locked to the server-side grants.
+   7. `supabase/migrations/007_governance.sql` — leave requests, removal votes, manager elections.
+   8. `supabase/migrations/008_ledger.sql` — per-mess identity, history after leaving, late settlements.
+   9. `supabase/migrations/009_trust_and_adoption.sql` — join approval, bazar receipts, voidable utilities, Pro expiry, push subscriptions and Dhaka date defaults.
+   10. `supabase/migrations/010_scale_and_support.sql` — hot-path indexes, `cycle_totals`, platform admins, the support console RPCs and `push_deliveries`.
+   > **Current live project:** `009` is applied and verified (`join_requests` answers 200). `010` still has to be run once; until then the dashboard uses the client totals, the support console says “not authorised”, and push reminders cannot de-duplicate. The client falls back without breaking the books.
 3. **Auth → Providers → Google**: enable, add the Google client ID/secret from Google Cloud Console. Authorised redirect URI in Google Cloud: `https://<project-ref>.supabase.co/auth/v1/callback`.
 4. **Auth → URL Configuration**:
    - Site URL: `https://mess-mates.vercel.app`
@@ -1031,3 +1037,232 @@ There is still no payment gateway, so Pro is sold as follows:
 **Checked in the demo build at 360 px:** the Council tab shows the elected manager with their term start, the pending leave request, the 80%-quorum reminder and the per-member removal buttons; approving the request marked the member `left`, removed them from the removal list and kept the request in history with an export button; a removal poll was created for Rakib and rendered "0/4 voted · 4 needed" with both options and an export link; the deposit tab showed Tanvir's ৳2,000 payment as *waiting for the manager*, and approving it added the deposit (৳25,000 → ৳27,000) and cleared the card.
 
 **Not verified here:** no live Supabase session was available, so the `007` functions, RLS changes and Realtime additions have only been exercised against the demo backend — they must be tried with two real accounts after the migration (see the checklist in the handoff message). The owner ran `005` and `006` on 24 Nov 2026; I could not independently confirm the publication/trigger state from this machine.
+
+## 27. One account, many messes: per-mess identity, lasting history and settlements (25 Nov 2026)
+
+The owner's policy, now enforced in the database rather than described in the UI:
+
+1. A person has **one account** and **one identity per mess**. `mess_members.display_name` / `avatar_url` override the profile for that mess only, so a new mess sees a clean name instead of inheriting an old nickname. Set it in **Mess Hub → Settings → Your name in this mess**; the RPC is `set_member_identity()`, which only lets a person rename themselves.
+2. **Leaving deletes nothing.** The membership row turns `left`; every meal, bazar entry and deposit stays with the mess, and the member keeps read access to their own rows. Accounting is never detached from the person who created it.
+3. **Each side sees only its own books.** The new mess sees the person, never the old mess's figures. The old mess keeps its rows and can export the member's statement. The member sees all their months in **Mess Hub → My ledger** (and on the join-a-mess screen after leaving).
+4. **A closed month never changes.** A late payment is recorded in `dues_settlements` *beside* the month: the member sends it with proof, the manager approves it (or records cash received), and the ledger's outstanding balance falls while the month's rate, utilities and totals stay byte-identical.
+5. **Money rows are never deleted.** `member_deposits` and `bazar_expenses` lost their delete policies; the manager voids a row with a reason (`void_deposit`, `void_bazar_expense`), and the amount, the reason and the name of whoever voided it stay on the record. `enforce_open_cycle()` allows exactly one update shape on a closed month — stamping a void — and refuses anything else.
+
+### 27.1 Schema and rules (`supabase/migrations/008_ledger.sql`)
+
+- `mess_members.display_name`, `mess_members.avatar_url`.
+- `member_deposits` / `bazar_expenses`: `voided_at`, `voided_by`, `void_reason`; delete policies dropped (`deposits_delete`, `bazar_delete`).
+- New table `dues_settlements` (`direction` `member_to_mess` / `mess_to_member`, `status` `pending`/`approved`/`rejected`/`cancelled`, method/reference/proof, requested_by/decided_by/decided_at/decision_note). RLS: the member sees their own rows, the mess's admin/manager sees the mess's rows; no client insert/update/delete.
+- RPCs: `set_member_identity`, `void_deposit`, `void_bazar_expense`, `request_settlement`, `record_settlement`, `decide_settlement`, `cancel_settlement`, `my_ledger`.
+- `my_ledger()` is `SECURITY DEFINER` and filters every aggregate by `auth.uid()`. It returns one row per month per mess: meals, meal cost, utility share, payable, non-void deposits, approved bazar paid, settlements in/out and `outstanding` (positive = the member owes). Computing the month's rate needs mess-wide totals, so this is the only way a former member can read their own line without seeing anybody else's.
+- New read policies keep history readable after leaving: own rows on `daily_meals` / `member_deposits` / `bazar_expenses`, own `mess_members` row, and `messes` / `monthly_cycles` where a membership row exists (`is_mess_alumnus`). `profiles_select` now requires *active* co-membership, so past mates keep the accounting but no longer see an ex-member's email.
+- `dues_settlements` joins the Realtime publication.
+
+### 27.2 App
+
+- `src/lib/ledger.ts` (pure): `memberName` / `memberAvatar` (per-mess first, profile fallback), `outstandingOf`, `ledgerTotals`, `pendingSettlements`, `openSettlementFor`, `suggestedSettlement`, `isVoided`.
+- `computeSettlement` ignores voided deposits and bazar rows, so a void instantly leaves the rate, the totals and every balance.
+- **My ledger** (`src/components/LedgerPanel.tsx`): Hub tab and onboarding card. Months grouped per mess with payable / paid / settled / outstanding, a total, and **Settle** on a closed month with an open balance.
+- **Late payments & refunds** (`src/components/SettlementCard.tsx`) in Meals & Bazar → Deposits: pending requests with approve/reject, plus a form for the manager to record money already held (member picker includes former members).
+- `Backend` gained `setMemberIdentity`, `loadLedger`, `requestSettlement`, `recordSettlement`, `decideSettlement`, `cancelSettlement`, `voidDeposit`, `voidBazar`; `deleteDeposit`/`deleteBazar`/`deleteAccount` are gone (the offline outbox queues `voidBazar`/`voidDeposit` with their reason). Both backends implement the same rules; the demo mirrors the SQL.
+- The "Delete account" button and its RPC call are removed from the UI. Its `delete_my_account()` function stays in `007` for compatibility but nothing calls it: leaving plus a lasting ledger covers the need, and true identity deletion would need the service role.
+
+### 27.3 Setup, verification and limits
+
+**Required once, in the Supabase SQL editor:** run `supabase/migrations/008_ledger.sql` after `007_governance.sql`. Until then the new queries fail quietly (the ledger is empty, void/settle writes return the DB's error), but the rest of the app behaves as before.
+
+- `npm run typecheck` — pass.
+- `bun test` — **78 pass / 0 fail across 9 files** (197 expects); new `tests/ledger.test.ts` covers per-mess names, outstanding arithmetic, totals, one-open-request-per-month and the void rules inside `computeSettlement`. `tests/outbox.test.ts` now asserts that a void keeps the row with its reason instead of removing it.
+- `npm run build` — pass.
+
+**Checked in the demo build:** My ledger rendered both seeded months with their own payable/paid/outstanding; a ৳150 manager payment recorded from the Deposits tab appeared under *Recently settled* and moved October's outstanding by exactly ৳150 with the month's rate unchanged; voiding a ৳6,000 deposit kept the row on screen marked **Voided** with the typed reason while the month's paid total dropped to ৳0. (The void test was run on an open month; the SQL allows a void on a closed one.)
+
+**Not verified here:** there is no live Supabase session on this machine, so the `008` policies, RPCs (`my_ledger`, settlements, voids) and the Realtime channel have only run against the demo backend. They need one two-account check after the migration: member leaves, opens My ledger, settles a closed month, manager approves, and the old month's figures do not move. A void on a closed month should succeed; any other edit must be refused.
+
+## 28. Truth pass: settlements, settle-up copy, history, no fake ads, standing plan
+
+The audit's five trust findings are fixed. Nothing here needs a new migration except where noted; the app is otherwise unchanged in what it stores.
+
+### 28.1 A settlement now moves the balance
+
+- `computeSettlement` reads `workspace.settlements`, keeps only `status = 'approved'` rows for the selected cycle, and adds them to the balance:
+  `balance = deposits + settledIn − settledOut + carriedBalance − payable`.
+- `MemberSettlement` gained `settledIn` / `settledOut`; `Settlement` gained `totalSettledIn` / `totalSettledOut`.
+- Because `carriedBalances` is built from `computeSettlement`, a late payment recorded against a **closed** month now also lowers what is carried into the next month. Before this, a settled due was still shown — and re-carried — as due.
+- Pending and rejected requests are never money. The month's own figures (rate, totals, utilities) still never change.
+
+### 28.2 Settle-up says what is actually true
+
+`settleUpState(settlement)` returns one of four states, and the settlement page prints the matching sentence:
+
+| state | when | copy |
+|---|---|---|
+| `transfers` | at least one member in credit and one in debt | "N payment(s) clear the month" |
+| `owed_to_mess` | nobody has credit, members still owe | "Members owe the mess ৳X" |
+| `mess_owes_members` | deposits ahead of spending | "The mess owes members ৳X" |
+| `settled` | every balance is zero | "Everyone is settled up" |
+
+"No transfers needed" used to be printed for all of the middle two cases, which is how a mess with ৳4,730 of dues told its manager everyone was square. Approved late payments are now also listed in the settlement card ("৳X of approved late payments is already counted").
+
+### 28.3 The ledger is never behind a paywall
+
+`Dashboard` no longer slices the month selector at two, and there is no `(Pro)` lock: every month a member can see is open to them. The Pro sheet no longer claims "unlimited historical archives".
+
+### 28.4 Placeholder monetisation removed
+
+- `BannerAdSlot` ("Banner slot · AdSense / AdMob ready") is deleted, along with its dashboard placement and the free/Pro ad footer.
+- The five-second "rewarded ad" modal is deleted from `Monetization.tsx`. `showAd` / `openReward` are gone from the context; only `isPro` and `openUpgrade` remain.
+- The branded month-end PDF is free for every mess — no ad gate, no "AD" badge.
+- Challenge rooms open directly. Premium avatar frames are the one real Pro perk, and a free mess gets the upgrade sheet instead of a fake video slot.
+
+### 28.5 Meal cut-off and a standing plan
+
+- The cut-off already lived in Postgres (`meal_lock_hour`, `enforce_meal_lock()`); the Meals page now also states the pass-time and blocks member edits through `isMealLocked`, and the standing-plan card repeats it (`meals.standingLocked`).
+- **Standing plan** (`src/lib/standingPlan.ts`, `src/components/StandingPlan.tsx`): per person **per mess**, stored in `localStorage` under `mm.standing.v1`. The card sits at the top of the Meal grid with breakfast/lunch/dinner steppers, an on/off switch and **Fill today**.
+- `StandingPlanAutoApply` is mounted in `AppLayout`, so it runs on any page, not just Meals. It fills **the signed-in member's own meals for today, once a day**, and only when that day has no figures yet (`shouldFill`). It never touches a mate's row, never a locked/closed day, and never overwrites an existing log — the worst case is saving four taps.
+- Reminders now go through the service worker (`src/lib/notify.ts` → `registration.showNotification`), so a notification survives a tab switch; `public/sw.js` gained a `notificationclick` handler that focuses the app or opens it. This is **not** Web Push: nothing is delivered while the app is closed, and the UI copy says "nudge you once a day when you open the app". True background push needs a VAPID key pair plus a server-side send step (Supabase edge function + `push_subscriptions` table), which is not in this pass.
+
+### 28.6 Verification
+
+- `npm run typecheck` — pass.
+- `bun test` — **91 pass / 0 fail across 10 files** (224 expects). `tests/calc.test.ts` gained `approved settlements` (a late payment lowers the month and the carry-forward; a pending one does not; a refund raises the due) and `settleUpState` (all four states). `tests/standingPlan.test.ts` covers the once-a-day rule, the empty plan and that zeros are never written.
+- `npm run build` — pass.
+- Checked on the live dev server (signed in against the real Supabase project): the settlement page, the dashboard month picker and the Meals page.
+
+**Still open at the end of this pass:** the items now listed in §29.9. A settlement approved by a *second* account has still not been exercised end to end — only one account is available on this machine.
+
+---
+
+## 29. Second audit pass — adoption, trust and Bangla (25 November 2026)
+
+This pass implements the rest of the audit: everything that did not need a vendor decision or a credential. `supabase/migrations/009_trust_and_adoption.sql` is new and **must be run** for join approval, bazar receipts, voidable utilities, Pro expiry and push subscriptions. Every client change degrades gracefully on a project that has not run it.
+
+### 29.1 Localisation is complete (F10)
+
+`src/lib/format.ts` now reads the same language store as the dictionary:
+
+| Function | Bangla behaviour |
+|---|---|
+| `money` / `formatMeals` / `compactMoney` | Bengali digits (৳১,২৩৪.৫০), same value |
+| `monthTitle` / `shortDate` / `weekdayShort` | Bengali month and weekday names (নভেম্বর ২০২৬, ২৫ নভে, বুধ) |
+| `relativeDay` / `timeAgo` / `clockTime` | আজ / আগামীকাল / গতকাল, “২ ঘণ্টা আগে”, “রাত ৯:৩০” |
+| `translate()` | numeric placeholders localise automatically (`{count}` → ২) |
+
+`todayISO()` is now the **Dhaka** calendar date (`Intl` with `timeZone: 'Asia/Dhaka'`), and `isMealLocked` uses the Dhaka hour. `009` also changes the SQL defaults for `paid_date` / `expense_date` to Dhaka, so a payment recorded at 00:30 no longer lands on the previous day (F20).
+
+### 29.2 Dark mode (F11)
+
+- `tailwind.config.js` uses `darkMode: 'class'`; `src/lib/theme.ts` stores `light | dark | system` under `mm_theme_v1`, applies `.dark` on `<html>` before the first paint (`initTheme()` in `main.tsx`), and listens for OS changes while on `system`.
+- `index.css` remaps the small set of surface/text/border utilities the app already uses, plus the tinted alert surfaces, so every screen (including the auth hero and print preview) has a dark equivalent without a second palette.
+- `ThemeToggle` sits in the desktop sidebar and the phone header; **Mess Hub → Settings** has System / Light / Dark.
+
+### 29.3 Join approval (F12)
+
+- New `join_requests` table (RLS: own requests or the mess admin) and two RPCs: `request_join_mess(code, note)` and `decide_join_request(request, approve)`.
+- A code now opens a **pending request**; only an admin can add the member. Five requests per hour per account, one pending request per person per mess, and the existing ban list still blocks a removed member.
+- `joinMess()` still falls back to the old `join_mess` RPC on a pre-009 database, so the app is not broken while the migration is pending.
+- Pending requests appear in **Hub → Settings → Join requests**, with the requester’s name and email.
+
+### 29.4 Bazar receipts and itemised lists (F13)
+
+`bazar_expenses` gained `items_json` and `proof_path`. The bazar form accepts a receipt photo (same private `deposit-proofs` bucket, 2 MB limit) and one item per line; the list renders as chips on the expense and the receipt opens through a one-hour signed URL. `addBazar()` retries without the new columns on a pre-009 database.
+
+### 29.5 Utilities are voided, not deleted (F14)
+
+- `fixed_utilities` gained `voided_at` / `voided_by` / `void_reason`; the delete policy is dropped so no client can make a shared cost vanish.
+- `void_utility(id, reason)` keeps the row, the amount and the reason; `computeSettlement` excludes voided utilities from the split. The UI shows the voided row struck through with its reason.
+- The native `window.prompt` is gone (F15): bazar, deposits and utilities all use the app’s `Modal` with a required reason (`VoidModal` in `MealsBazar.tsx`).
+
+### 29.6 Offline queue covers money (F5)
+
+`src/lib/outbox.ts` now queues `requestSettlement`, `recordSettlement`, `decideSettlement`, `cancelSettlement`, `requestDeposit`, `decideDepositRequest`, `cancelDepositRequest` and `voidUtility`. Queued operations are applied optimistically to the cached workspace, so a manager on a weak connection sees the pending settlement or void immediately instead of a generic failure.
+
+### 29.7 Recovery, duplicate accounts and legal pages (F19, F6, F26)
+
+- `ErrorBoundary` gained a `compact` route mode keyed by `location.pathname`; a crash in Arena or a game now leaves the sidebar, bottom bar and toasts alive, with Try again / Reload.
+- `src/lib/identity.ts` + a Hub warning for admins: two active members whose names match after honorifics (`Md.`, `Mohammad`, …) or whose email/photo match are flagged as “two accounts may be the same person”. Nothing is merged automatically — the admin removes one membership and every past month keeps its figures.
+- `/privacy` and `/terms` are real routes outside the auth gate, in English and Bangla, linked from the sign-in screen, the Hub account card and the Pro sheet.
+
+### 29.8 Pro expiry and push plumbing (F22, F7, F24)
+
+- `messes` gained `pro_until`, `pro_plan`, `pro_reference`; the Pro card shows “Pro until …” when a date is recorded. The export is still free; a Pro mess only gets the Pro footer.
+- **Web Push is now implemented, not just described**: `push_subscriptions` (owner-only RLS), `src/lib/push.ts` (VAPID public key from `VITE_VAPID_PUBLIC_KEY`, subscribe/unsubscribe, store per account + mess), a `push` handler in `public/sw.js`, and `supabase/functions/send-push/index.ts` (Deno, `web-push`, removes 404/410 subscriptions). To turn it on: set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` as Edge Function secrets, add the public key as `VITE_VAPID_PUBLIC_KEY`, deploy the function and call it on a schedule. Without the key the reminder centre keeps the on-device notifications and says so.
+- Install icons: `public/icon.svg` and `public/icon-maskable.svg` (safe-zone art) join the existing PNG in the manifest.
+
+### 29.9 Bangla PDF (F27)
+
+`src/lib/pdf.ts` keeps the vector jsPDF path for Latin-only statements. When the UI is Bangla or any name contains Bengali, it draws the statement on a 1240×1754 canvas (the browser shapes conjuncts correctly), paginates the table, and embeds each page as an image in the PDF. `৳`, Bengali names and month labels render; the vector path never had the glyphs.
+
+### 29.10 Verification and what is still open
+
+- `npm run typecheck` — pass.
+- `bun test` — **103 pass / 0 fail across 12 files** (251 expects). New: `tests/format.test.ts` (Bengali digits/months/relative dates, Dhaka date maths) and `tests/identity.test.ts` (honorifics, false positives, shared email); `tests/outbox.test.ts` covers queued settlement + void.
+- `npm run build` — pass.
+- **Not verified here:** migration `009` has not been run against the live project (no SQL credentials on this machine), so join approval, receipts, utility voiding and push storage are untested end to end; the push function has never been deployed and no VAPID pair exists; the canvas PDF was built but not opened on a Bangla statement; dark mode was checked by build/CSS inspection, not on a phone.
+- **Still needs a decision or a vendor:** price change (F21 — the audit suggests free core + ৳499/year per mess); phone/SMS OTP (F9 — needs an SMS provider); server-side `cycle_summary` and incremental realtime (F16/F17); ESLint + dependency audit in CI (F18); an admin console that can grant/expire Pro without SQL (F23, partially covered by the new expiry field); a separate marketing landing page (F25).
+
+> **Superseded by §30:** F16/F17, F18, F23 and F25 were implemented in the next pass.
+
+---
+
+## 30. Third pass — scale, support, acquisition (26 November 2026)
+
+**`supabase/migrations/010_scale_and_support.sql` is new and must be run** after 009. It adds indexes, server-side cycle totals, the platform-admin console and the push delivery log. Every client path degrades safely until it is applied.
+
+### 30.1 Server totals and indexes (F16, partial)
+
+- `cycle_totals(cycle)` returns meals, meal rate, approved bazar, pending bazar, utilities, deposits and active members for one month, using the same filters as `calc.ts` (approved + non-voided bazar, non-voided utilities/deposits). Access is checked against active membership.
+- The dashboard uses these values when the RPC is available and falls back to `computeSettlement` on a pre-010 database. Per-member money, carried credit and the transfer plan still come from the client calculation, so there is **one** implementation of the settlement rules. A full server-side settlement is deliberately not duplicated.
+- Indexes cover the cycle-scoped reads (`daily_meals`, `bazar_expenses`, `fixed_utilities`, `member_deposits`, `dues_settlements`), plus messages, cycles, join requests and push subscriptions.
+
+### 30.2 Incremental realtime (F17, partial)
+
+- `Backend.subscribe` now reports `{ table, eventType, row, oldRow }` instead of a bare “something changed”.
+- Chat (`mess_messages`) and meals (`daily_meals`) are merged into the workspace as rows arrive, so the two noisiest tables no longer trigger a full refetch. Deletes are applied by id.
+- Every other table still takes the 600 ms debounced full reload. A hidden tab marks itself dirty and reloads once on `visibilitychange`, instead of fetching in the background.
+
+### 30.3 Push reminders (F7 activation)
+
+- `send-push` now requires `Authorization: Bearer $PUSH_TRIGGER_SECRET`; before this, anyone with the function URL could push to every stored subscription.
+- `mode: "reminders"` finds unlogged meals for today, pending bazar approvals for managers, and tomorrow’s bazar duty. `push_deliveries` makes each reminder once per person per kind per Dhaka day, so a cron retry cannot spam.
+- `.github/workflows/push-reminders.yml` calls it at 07:30 and 21:00 Dhaka when `SUPABASE_URL` and `PUSH_TRIGGER_SECRET` exist as repository secrets. Setup is in `supabase/functions/send-push/README.md`.
+
+### 30.4 Support console (F23)
+
+- `platform_admins` is separate from mess roles: a mess admin cannot grant themselves Pro, and support cannot read a mess’s books. `support_overview()` returns only mess metadata, member counts and the last 25 client errors; `admin_set_pro()` grants, renews or revokes Pro with a plan and reference.
+- The page is `#/support`, linked from Hub → Account only when `is_platform_admin()` is true. Seed the first admin once:
+
+  ```sql
+  insert into public.platform_admins (user_id, note)
+  select id, 'owner' from public.profiles where email = 'you@example.com'
+  on conflict (user_id) do nothing;
+  ```
+
+### 30.5 Landing page and sign-in route (F25)
+
+- Signed-out visitors now land on `src/pages/Landing.tsx` at `/`: bilingual hero, feature grid, how-it-works, trust section, current pricing and FAQ. Sign-in is `/signin`; the auth screen links back home.
+- Section navigation uses buttons and `scrollIntoView`, not `href="#features"`, because a hash link would replace the HashRouter route.
+- Pricing copy was **not** changed: free core plus Pro at ৳199/month arranged on WhatsApp. F21 remains a business decision.
+
+### 30.6 Toolchain and CI (F18)
+
+- ESLint 10 flat config (`eslint.config.js`) with TypeScript, React hooks and fast-refresh rules. `npm run lint` passes with two fast-refresh warnings (context/provider files export a hook beside a component).
+- CI now runs lint, typecheck, tests, build and `bun audit --audit-level=high`.
+- `react-router-dom` 7.18 removed the open-redirect/deserialisation advisories; Vite 7 and `@vitejs/plugin-react` 5 removed the dev-server advisory. `bun audit` is clean (308 packages).
+
+### 30.7 Verification
+
+- `npm run typecheck` — pass.
+- `npm run lint` — pass (0 errors, 2 warnings).
+- `bun test` — **103 pass / 0 fail across 12 files** (251 expects). No new pure logic was added that warranted a separate test file.
+- `npm run build` — pass on Vite 7.
+- `bun audit --audit-level=high` — clean.
+- Browser checks on the local server: landing page in English; Bangla switch; `/signin`; demo sign-in; support console loaded; Pro grant showed “Pro until …”, enabled Revoke and persisted; Hub Settings exposed the support link and theme controls; dashboard rendered with the server totals path (367 meals, ৳47.68 rate at the time of the check).
+
+### 30.8 Still open
+
+- **Run migration 010** before deploying this client; the dashboard, support console and push de-duplication rely on it (all have fallbacks, but the features stay off).
+- **Push delivery is still not exercised**: no VAPID pair, function deployment, secrets or repository secrets exist here. The GitHub workflow exits cleanly until they do.
+- **Two-account acceptance test** (join approval, settlement decision) is still not possible on this machine.
+- **Full server-side settlement** (carried balances, per-member money) is still client-side by design; only headline totals moved to SQL.
+- **F9 phone OTP** needs an SMS vendor. **F21 pricing** needs the owner’s decision. **F6 account merge** remains detection-only; merging history needs a designed flow.

@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
+  BookOpen,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -24,10 +26,13 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useMonetization } from '../components/Monetization'
+import { LedgerPanel } from '../components/LedgerPanel'
 import { Avatar, Button, CopyButton, EmptyState, Modal, Pill, SectionHeading, ShareButton, Tabs } from '../components/ui'
 import { resetDemoData } from '../lib/demo'
+import { findLikelyDuplicates } from '../lib/identity'
 import { useI18n } from '../lib/i18n'
-import { addDays, money, monthOptions, monthTitle, relativeDay, shortDate, timeAgo, todayISO } from '../lib/format'
+import { useTheme, type Theme } from '../lib/theme'
+import { addDays, dhakaDate, formatMeals, money, monthOptions, monthTitle, relativeDay, shortDate, timeAgo, todayISO } from '../lib/format'
 import { computeSettlement } from '../lib/calc'
 import { closeOutReview, type CloseOutIssue } from '../lib/closeOut'
 import {
@@ -43,8 +48,9 @@ import {
 import type { ClientError, MonthlyCycle } from '../lib/types'
 import { downloadMemberStatement, downloadSettlementCsv, downloadWorkspace } from '../lib/export'
 import type { BazarDuty, MessMember, Role } from '../lib/types'
+import { memberName } from '../lib/ledger'
 
-type HubTab = 'board' | 'roster' | 'council' | 'settings'
+type HubTab = 'board' | 'roster' | 'council' | 'ledger' | 'settings'
 
 export function Hub() {
   const [tab, setTab] = useState<HubTab>('board')
@@ -64,6 +70,7 @@ export function Hub() {
           { id: 'board', label: t('hub.tabBoard'), icon: <MessageSquare className="h-3.5 w-3.5" /> },
           { id: 'roster', label: t('hub.tabRoster'), icon: <ShoppingBasket className="h-3.5 w-3.5" /> },
           { id: 'council', label: t('gov.tab'), icon: <Vote className="h-3.5 w-3.5" /> },
+          { id: 'ledger', label: t('ledger.tab'), icon: <BookOpen className="h-3.5 w-3.5" /> },
           { id: 'settings', label: t('hub.tabSettings'), icon: <Settings2 className="h-3.5 w-3.5" /> },
         ]}
       />
@@ -71,6 +78,7 @@ export function Hub() {
       {tab === 'board' ? <BoardTab /> : null}
       {tab === 'roster' ? <RosterTab /> : null}
       {tab === 'council' ? <CouncilTab /> : null}
+      {tab === 'ledger' ? <LedgerPanel /> : null}
       {tab === 'settings' ? <SettingsTab /> : null}
     </div>
   )
@@ -237,7 +245,7 @@ function RosterTab() {
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const canManage = myRole === 'admin' || myRole === 'manager'
   const members = ws.members.filter((member) => member.status === 'active')
-  const nameOf = (id: string) => members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const nameOf = (id: string) => memberName(members.find((member) => member.user_id === id))
   const memberOf = (id: string) => members.find((member) => member.user_id === id)
 
   const upcoming = ws.duty.filter((duty) => duty.status === 'upcoming').sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
@@ -455,13 +463,21 @@ function CouncilTab() {
   const [electionDays, setElectionDays] = useState('2')
   const [removalFor, setRemovalFor] = useState<MessMember | null>(null)
   const [removalDays, setRemovalDays] = useState('2')
+  // The closed/open badge should follow the wall clock without reading it
+  // during render; one refresh a minute is enough for a poll deadline.
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
 
   if (!ws || !user) return null
 
   const myRole = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
   const isAdmin = myRole === 'admin'
   const active = ws.members.filter((member) => member.status === 'active')
-  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
+  const nameOf = (id: string) => memberName(ws.members.find((member) => member.user_id === id))
   const activeCount = active.length
   const term = currentManagerTerm(ws.managerTerms, todayISO())
   const manager = term ? ws.members.find((member) => member.user_id === term.user_id) : null
@@ -480,7 +496,7 @@ function CouncilTab() {
     .slice(0, 3)
   const polls = [...openPolls, ...appliedPolls]
 
-  const isClosed = (closesAt: string) => new Date(closesAt).getTime() <= Date.now()
+  const isClosed = (closesAt: string) => new Date(closesAt).getTime() <= now
 
   const startElection = async () => {
     const closesAt = new Date(Date.now() + Math.max(1, Number(electionDays)) * 86400_000).toISOString()
@@ -888,17 +904,35 @@ function SettingsTab() {
   const { ws, user, cycle, settlement, backend, run, busy, signOut, setCycleId } = useApp()
   const { isPro, openUpgrade } = useMonetization()
   const { t } = useI18n()
+  const { theme, setTheme } = useTheme()
   const [name, setName] = useState(ws?.mess.name ?? '')
   const [currency, setCurrency] = useState(ws?.mess.currency_symbol ?? '৳')
   const [lockHour, setLockHour] = useState(String(ws?.mess.meal_lock_hour ?? 22))
   const [displayName, setDisplayName] = useState(user?.full_name ?? '')
+  const [perMessName, setPerMessName] = useState(
+    () => ws?.members.find((member) => member.user_id === user?.id)?.display_name ?? '',
+  )
   const [nextMonth, setNextMonth] = useState(monthOptions(4)[1]?.label ?? '')
   const [leaving, setLeaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [closing, setClosing] = useState<MonthlyCycle | null>(null)
   const [errorRows, setErrorRows] = useState<ClientError[] | null>(null)
   const [errorsBusy, setErrorsBusy] = useState(false)
+  const [platformAdmin, setPlatformAdmin] = useState(false)
   const monthChoices = monthOptions(4)
+
+  useEffect(() => {
+    let cancelled = false
+    backend
+      .isPlatformAdmin()
+      .then((allowed) => {
+        if (!cancelled) setPlatformAdmin(allowed)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [backend])
 
   if (!ws || !user) return null
 
@@ -906,6 +940,18 @@ function SettingsTab() {
   const canManage = myRole === 'admin' || myRole === 'manager'
   const isAdmin = myRole === 'admin'
   const myRequest = openRequestFor(ws.requests, user.id)
+  const joinRequests = (ws.joinRequests ?? []).filter((request) => request.status === 'pending')
+  const duplicates = isAdmin ? findLikelyDuplicates(ws.members) : []
+  const labelOf = (member: (typeof ws.members)[number]) =>
+    member.display_name?.trim() || member.profile.full_name
+  const reasonLabel = (reason: 'name' | 'email' | 'photo') =>
+    t(
+      reason === 'name'
+        ? 'hub.duplicateReasonName'
+        : reason === 'email'
+          ? 'hub.duplicateReasonEmail'
+          : 'hub.duplicateReasonPhoto',
+    )
 
   const loadErrors = async () => {
     setErrorsBusy(true)
@@ -917,6 +963,9 @@ function SettingsTab() {
       setErrorsBusy(false)
     }
   }
+
+  const savePerMessName = () =>
+    run(() => backend.setMemberIdentity({ displayName: perMessName }), t('ledger.messNameSaved'))
 
   const saveMess = () =>
     run(
@@ -965,6 +1014,22 @@ function SettingsTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <div className="card p-4 lg:col-span-2">
+        <SectionHeading title={t('ledger.messName')} hint={t('ledger.messNameHint')} />
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            className="field"
+            maxLength={40}
+            value={perMessName}
+            placeholder={user.full_name}
+            onChange={(event) => setPerMessName(event.target.value)}
+          />
+          <Button disabled={busy} onClick={savePerMessName} className="sm:w-auto">
+            {t('ledger.messNameSave')}
+          </Button>
+        </div>
+      </div>
+
       <div className="card p-4">
         <SectionHeading title={t('hub.messProfile')} hint={canManage ? t('hub.canEdit') : t('hub.readOnly')} />
         <div className="space-y-3">
@@ -1149,9 +1214,109 @@ function SettingsTab() {
         ) : (
           <div className="card flex items-center gap-2 p-4">
             <Crown className="h-4 w-4 text-amber-500" />
-            <p className="text-xs font-bold text-ink-800">{t('hub.proActive')}</p>
+            <p className="text-xs font-bold text-ink-800">
+              {ws.mess.pro_until
+                ? t('hub.proUntil', { date: shortDate(dhakaDate(new Date(ws.mess.pro_until))) })
+                : t('hub.proActive')}
+            </p>
           </div>
         )}
+
+        {isAdmin ? (
+          <div className="card p-4">
+            <SectionHeading title={t('hub.joinRequests')} hint={t('hub.joinRequestsHint')} />
+            {joinRequests.length === 0 ? (
+              <p className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] text-ink-500">
+                {t('hub.noJoinRequests')}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {joinRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex flex-wrap items-center gap-2 rounded-xl border border-ink-100 px-2.5 py-2"
+                  >
+                    <Avatar
+                      name={request.profile?.full_name ?? 'New mate'}
+                      url={request.profile?.avatar_url ?? null}
+                      size="sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-bold text-ink-900">
+                        {request.profile?.full_name ?? 'New mate'}
+                      </p>
+                      <p className="text-[10px] text-ink-400">
+                        {request.profile?.email || t('hub.joinRequested', { when: timeAgo(request.created_at) })}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() =>
+                        run(() => backend.decideJoinRequest(request.id, true), t('hub.joinApproved'))
+                      }
+                    >
+                      <Check className="h-3.5 w-3.5" /> {t('hub.approveJoin')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() =>
+                        run(() => backend.decideJoinRequest(request.id, false), t('hub.joinRejected'))
+                      }
+                    >
+                      <X className="h-3.5 w-3.5" /> {t('hub.rejectJoin')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {duplicates.length ? (
+          <div className="card border-amber-200 p-4">
+            <p className="flex items-center gap-1.5 text-sm font-extrabold text-amber-800">
+              <AlertTriangle className="h-4 w-4" /> {t('hub.duplicateTitle')}
+            </p>
+            <div className="mt-2 space-y-2">
+              {duplicates.map((pair) => (
+                <p
+                  key={`${pair.first.id}-${pair.second.id}`}
+                  className="text-[11px] leading-relaxed text-ink-600"
+                >
+                  {t('hub.duplicateBody', {
+                    first: labelOf(pair.first),
+                    second: labelOf(pair.second),
+                    reason: reasonLabel(pair.reason),
+                  })}
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="card p-4">
+          <SectionHeading title={t('theme.label')} />
+          <div className="flex flex-wrap gap-1.5">
+            {(['system', 'light', 'dark'] as Theme[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTheme(value)}
+                aria-pressed={theme === value}
+                className={`min-h-11 flex-1 rounded-lg border px-3 py-2 text-[11px] font-bold transition ${
+                  theme === value
+                    ? 'border-brand-300 bg-brand-50 text-brand-800'
+                    : 'border-ink-200 bg-white text-ink-500 hover:border-brand-200'
+                }`}
+              >
+                {t(`theme.${value}`)}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {isAdmin ? (
           <div className="card p-4">
@@ -1236,6 +1401,27 @@ function SettingsTab() {
               <Trash2 className="h-3 w-3" /> {t('hub.resetDemo')}
             </button>
           ) : null}
+          {platformAdmin ? (
+            <Link
+              to="/support"
+              className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-[11px] font-bold text-brand-800 transition hover:bg-brand-100"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> Platform support console
+            </Link>
+          ) : null}
+          <div className="mt-3 border-t border-ink-100 pt-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">
+              {t('hub.legalHint')}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-3 text-[11px] font-bold">
+              <Link to="/privacy" className="text-brand-700 hover:text-brand-800">
+                {t('legal.privacyTitle')}
+              </Link>
+              <Link to="/terms" className="text-brand-700 hover:text-brand-800">
+                {t('legal.termsTitle')}
+              </Link>
+            </div>
+          </div>
           <p className="mt-3 flex items-center gap-1 text-[10px] text-ink-400">
             <ShieldCheck className="h-3 w-3" />{' '}
             {backend.mode === 'demo' ? t('hub.demoFooter') : t('hub.liveFooter')}
@@ -1271,7 +1457,7 @@ function SettingsTab() {
                     label: t('hub.closeMealRate'),
                     value: money(closingReview.settlement.mealRate, symbol),
                   },
-                  { label: t('hub.closeMeals'), value: String(closingReview.settlement.totalMeals) },
+                  { label: t('hub.closeMeals'), value: formatMeals(closingReview.settlement.totalMeals) },
                   {
                     label: t('hub.closeBazar'),
                     value: money(closingReview.settlement.totalBazar, symbol),

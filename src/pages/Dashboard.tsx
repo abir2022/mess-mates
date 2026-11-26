@@ -14,16 +14,16 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { GettingStarted } from '../components/GettingStarted'
-import { BannerAdSlot, useMonetization } from '../components/Monetization'
 import { ReminderCenter } from '../components/ReminderCenter'
 import { Avatar, Button, Pill, SectionHeading } from '../components/ui'
-import { addDays, money, monthTitle, relativeDay, todayISO } from '../lib/format'
+import { addDays, formatMeals, localDigits, money, monthTitle, relativeDay, todayISO } from '../lib/format'
+import { round2 } from '../lib/calc'
+import { memberAvatar, memberName } from '../lib/ledger'
 import { useI18n, type MessageKey } from '../lib/i18n'
 import type { BazarDuty } from '../lib/types'
 
 export function Dashboard() {
-  const { ws, user, settlement, cycle, cycleId, setCycleId, busy } = useApp()
-  const { isPro, openUpgrade } = useMonetization()
+  const { ws, user, settlement, totals, cycle, cycleId, setCycleId, busy } = useApp()
   const { t } = useI18n()
 
   if (!ws || !user || !settlement || !cycle) return null
@@ -35,8 +35,9 @@ export function Dashboard() {
   const firstName = user.full_name.split(' ')[0]
   const today = todayISO()
 
+  // Every month this member can see belongs to them: an accounting app that
+  // hides last quarter's ledger is asking to be distrusted.
   const sortedCycles = [...ws.cycles].sort((a, b) => b.month_label.localeCompare(a.month_label))
-  const lockedCycleIds = isPro ? [] : sortedCycles.slice(2).map((entry) => entry.id)
 
   const dutyToday = ws.duty
     .filter((entry) => entry.status === 'upcoming' && entry.assigned_user_id === user.id)
@@ -48,8 +49,8 @@ export function Dashboard() {
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, 2)
 
-  const nameOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Member'
-  const avatarOf = (id: string) => ws.members.find((member) => member.user_id === id)?.profile.avatar_url ?? null
+  const nameOf = (id: string) => memberName(ws.members.find((member) => member.user_id === id))
+  const avatarOf = (id: string) => memberAvatar(ws.members.find((member) => member.user_id === id))
 
   const nudge = (duty: BazarDuty) => {
     const text = [
@@ -73,7 +74,16 @@ export function Dashboard() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener')
   }
 
-  const progressPct = settlement.totalBazar > 0 ? (settlement.totalDeposits / settlement.totalBazar) * 100 : 0
+  // Server totals when 010 is present; the client settlement is the fallback.
+  const statMeals = totals?.total_meals ?? settlement.totalMeals
+  const statBazar = totals?.total_bazar ?? settlement.totalBazar
+  const statPending = totals?.pending_bazar ?? settlement.pendingBazar
+  const statDeposits = totals?.total_deposits ?? settlement.totalDeposits
+  const statRate = totals?.meal_rate ?? settlement.mealRate
+  const statMembers = totals?.active_members ?? settlement.memberCount
+  const statUtilities = totals?.total_utilities ?? settlement.totalUtilities
+  const statUtilityShare = statMembers > 0 ? round2(statUtilities / statMembers) : settlement.utilityShare
+  const progressPct = statBazar > 0 ? (statDeposits / statBazar) * 100 : 0
 
   return (
     <div className="space-y-5">
@@ -93,20 +103,12 @@ export function Dashboard() {
           <div className="relative min-w-0 flex-1 sm:flex-none">
             <select
               value={cycleId ?? ''}
-              onChange={(event) => {
-                const next = event.target.value
-                if (lockedCycleIds.includes(next)) {
-                  openUpgrade()
-                  return
-                }
-                setCycleId(next)
-              }}
+              onChange={(event) => setCycleId(event.target.value)}
               className="field w-full appearance-none py-2 pr-8 text-xs font-bold sm:w-auto"
             >
               {sortedCycles.map((entry) => (
                 <option key={entry.id} value={entry.id}>
                   {monthTitle(entry.month_label)}
-                  {lockedCycleIds.includes(entry.id) ? ' (Pro)' : ''}
                 </option>
               ))}
             </select>
@@ -131,7 +133,7 @@ export function Dashboard() {
                 <UtensilsCrossed className="h-3.5 w-3.5" /> {t('dash.mealRate')}
               </p>
               <p className="mt-2 text-[34px] font-extrabold tabular-nums leading-none tracking-tight sm:text-4xl">
-                {money(settlement.mealRate, symbol)}
+                {money(statRate, symbol)}
               </p>
               <p className="mt-1 text-[11px] text-brand-50/70">{t('dash.perMeal')}</p>
             </div>
@@ -150,21 +152,21 @@ export function Dashboard() {
           <div className="relative mt-5 grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.meals')}</p>
-              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{settlement.totalMeals.toFixed(1)}</p>
+              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{formatMeals(statMeals)}</p>
             </div>
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.bazar')}</p>
-              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{money(settlement.totalBazar, symbol)}</p>
+              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{money(statBazar, symbol)}</p>
             </div>
             <div className="rounded-xl bg-white/10 px-2 py-2.5 backdrop-blur">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-100/70">{t('dash.pending')}</p>
-              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{money(settlement.pendingBazar, symbol)}</p>
+              <p className="text-xs font-extrabold tabular-nums sm:text-sm">{money(statPending, symbol)}</p>
             </div>
           </div>
 
           <div className="relative mt-4">
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-brand-50/80">
-              <span>{t('dash.depositsCollected', { amount: money(settlement.totalDeposits, symbol) })}</span>
+              <span>{t('dash.depositsCollected', { amount: money(statDeposits, symbol) })}</span>
               <span>{t('dash.vsBazar', { amount: money(settlement.totalBazar, symbol) })}</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-white/15">
@@ -207,7 +209,7 @@ export function Dashboard() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-ink-500">
-                  {t('dash.mealCost', { meals: me?.meals.toFixed(1) ?? '0' })}
+                  {t('dash.mealCost', { meals: me ? formatMeals(me.meals) : localDigits(0) })}
                 </dt>
                 <dd className="font-bold tabular-nums text-ink-800">{money(me?.mealCost ?? 0, symbol)}</dd>
               </div>
@@ -242,9 +244,9 @@ export function Dashboard() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
-          { icon: Users, label: 'dash.activeMembers', value: String(settlement.memberCount), tone: 'text-brand-600 bg-brand-50' },
-          { icon: UtensilsCrossed, label: 'dash.totalMeals', value: settlement.totalMeals.toFixed(1), tone: 'text-flame-600 bg-flame-50' },
-          { icon: Wallet, label: 'dash.utilityShareLabel', value: money(settlement.utilityShare, symbol), tone: 'text-indigo-600 bg-indigo-50' },
+          { icon: Users, label: 'dash.activeMembers', value: localDigits(statMembers), tone: 'text-brand-600 bg-brand-50' },
+          { icon: UtensilsCrossed, label: 'dash.totalMeals', value: formatMeals(settlement.totalMeals), tone: 'text-flame-600 bg-flame-50' },
+          { icon: Wallet, label: 'dash.utilityShareLabel', value: money(statUtilityShare, symbol), tone: 'text-indigo-600 bg-indigo-50' },
           { icon: ShoppingBasket, label: 'dash.bazarPaidByMe', value: money(me?.bazarPaid ?? 0, symbol), tone: 'text-emerald-600 bg-emerald-50' },
         ].map((stat) => (
           <div key={stat.label} className="card flex items-center gap-3 p-3.5">
@@ -336,7 +338,7 @@ export function Dashboard() {
           title={t('dash.memberBreakdown')}
           hint={t('dash.rateHint', {
             month: monthTitle(cycle.month_label),
-            rate: money(settlement.mealRate, symbol),
+            rate: money(statRate, symbol),
           })}
           action={
             <Link to="/settlement" className="-my-2 inline-flex min-h-11 items-center gap-1 px-1 text-xs font-bold text-brand-700 hover:text-brand-800">
@@ -375,7 +377,7 @@ export function Dashboard() {
                 <dl className="mt-2.5 grid grid-cols-3 gap-2 rounded-lg bg-ink-50/70 px-2.5 py-2 text-[11px]">
                   <div className="min-w-0">
                     <dt className="text-ink-400">{t('dash.meals')}</dt>
-                    <dd className="truncate font-bold tabular-nums text-ink-800">{member.meals.toFixed(1)}</dd>
+                    <dd className="truncate font-bold tabular-nums text-ink-800">{formatMeals(member.meals)}</dd>
                   </div>
                   <div className="min-w-0">
                     <dt className="text-ink-400">{t('dash.deposits')}</dt>
@@ -427,7 +429,7 @@ export function Dashboard() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-ink-700">{member.meals.toFixed(1)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums text-ink-700">{formatMeals(member.meals)}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink-700">{money(member.bazarPaid, symbol)}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink-700">{money(member.deposits, symbol)}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink-700">{money(member.payable, symbol)}</td>
@@ -465,9 +467,9 @@ export function Dashboard() {
               <tfoot>
                 <tr className="border-t border-ink-100 bg-ink-50/60 text-xs font-extrabold text-ink-800">
                   <td className="px-4 py-3">{t('dash.total')}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{settlement.totalMeals.toFixed(1)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{money(settlement.totalBazar, symbol)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{money(settlement.totalDeposits, symbol)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatMeals(statMeals)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{money(statBazar, symbol)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{money(statDeposits, symbol)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{money(settlement.totalPayable, symbol)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{money(settlement.refundable - settlement.due, symbol)}</td>
                   {canManage ? <td /> : null}
@@ -481,23 +483,12 @@ export function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 bg-white px-4 py-3">
         <p className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-500">
           <Trophy className="h-3.5 w-3.5 text-amber-500" />{' '}
-          {t('dash.guildRank', { points: ws.mess.guild_points.toLocaleString() })}
+          {t('dash.guildRank', { points: localDigits(ws.mess.guild_points.toLocaleString()) })}
         </p>
         <Link to="/arena" className="inline-flex min-h-11 items-center px-1 text-[11px] font-bold text-brand-700 hover:text-brand-800">
           {t('dash.openArena')}
         </Link>
       </div>
-
-      <BannerAdSlot />
-      <p className="pb-1 text-center text-[10px] text-ink-300">
-        {ws.mess.is_pro_mess ? (
-          <>
-            <Crown className="mr-1 inline h-3 w-3 text-amber-500" /> {t('dash.proAdFree')}
-          </>
-        ) : (
-          t('dash.freeTier')
-        )}
-      </p>
     </div>
   )
 }

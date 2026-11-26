@@ -6,6 +6,7 @@ import { Pill } from './ui'
 import type { GameRoom } from '../lib/types'
 import { timeAgo } from '../lib/format'
 import { START_FEN } from '../lib/chess'
+import { memberName } from '../lib/ledger'
 
 export { START_FEN }
 
@@ -61,7 +62,7 @@ export function ChessGame({ room }: { room: GameRoom }) {
   if (!ws || !user) return null
 
   const nameOf = (id: string | null) =>
-    id ? ws.members.find((member) => member.user_id === id)?.profile.full_name ?? 'Player' : null
+    id ? memberName(ws.members.find((member) => member.user_id === id)) : null
 
   const makeMove = async (from: Square, to: Square) => {
     const game = new Chess(fen)

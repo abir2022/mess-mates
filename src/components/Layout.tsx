@@ -17,10 +17,12 @@ import {
 import { useApp } from '../context/AppContext'
 import { Avatar, CopyButton, Pill } from './ui'
 import { bannerClass } from '../lib/backend'
-import { monthTitle } from '../lib/format'
+import { localDigits, monthTitle } from '../lib/format'
 import { useI18n, type MessageKey } from '../lib/i18n'
 import { usePwaUpdate } from '../lib/pwa'
 import { LanguageToggle } from './LanguageToggle'
+import { ThemeToggle } from './ThemeToggle'
+import { StandingPlanAutoApply } from './StandingPlan'
 
 const navItems: { to: string; label: MessageKey; icon: typeof LayoutDashboard; end: boolean }[] = [
   { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, end: true },
@@ -43,6 +45,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-ink-50 md:flex-row">
+      <StandingPlanAutoApply />
       <aside className="no-print no-scrollbar sticky top-0 hidden h-dvh w-72 shrink-0 flex-col overflow-y-auto border-r border-ink-100 bg-white px-4 py-5 md:flex">
         <div className="flex items-center gap-3 px-2">
           <img src="/logo.png" alt="Mess Mates" className="h-11 w-11 rounded-xl object-cover" />
@@ -61,7 +64,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
           <p className="mt-2 line-clamp-1 text-sm font-extrabold">{ws.mess.name}</p>
           <div className="mt-1 flex items-center gap-2 text-xs text-white/80">
-            <Trophy className="h-3 w-3" /> {t('layout.points', { points: ws.mess.guild_points.toLocaleString() })}
+            <Trophy className="h-3 w-3" /> {t('layout.points', { points: localDigits(ws.mess.guild_points.toLocaleString()) })}
             <span className="text-white/30">·</span>
             <span>{t('layout.code', { code: ws.mess.invite_code })}</span>
             <CopyButton value={ws.mess.invite_code} label="" />
@@ -83,7 +86,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="mt-auto space-y-3 pt-5">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <ThemeToggle />
             <LanguageToggle />
           </div>
           <div className="rounded-xl border border-ink-100 bg-ink-50/60 p-3">
@@ -135,12 +139,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="min-w-0 leading-tight">
               <p className="truncate text-sm font-extrabold text-ink-900">{ws.mess.name}</p>
               <p className="truncate text-[11px] font-semibold text-ink-400">
-                {ws.mess.guild_emblem} {ws.mess.guild_points.toLocaleString()} pts
+                {ws.mess.guild_emblem} {localDigits(ws.mess.guild_points.toLocaleString())} pts
 
               </p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            <ThemeToggle />
             <LanguageToggle />
             <Avatar name={user.full_name} url={user.avatar_url} frame={user.avatar_frame} size="sm" />
           </div>

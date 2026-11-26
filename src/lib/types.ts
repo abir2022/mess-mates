@@ -10,6 +10,9 @@ export type PollKind = 'general' | 'member_removal' | 'manager_selection'
 export type MemberRequestKind = 'leave' | 'delete'
 export type MemberRequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'auto_left'
 export type DepositRequestStatus = 'pending' | 'approved' | 'rejected'
+export type SettlementDirection = 'member_to_mess' | 'mess_to_member'
+export type SettlementStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected'
 
 export interface Profile {
   id: string
@@ -32,6 +35,10 @@ export interface Mess {
   guild_emblem: string
   guild_points: number
   is_pro_mess: boolean
+  /** Manual billing: the date the current Pro period ends, when recorded. */
+  pro_until?: string | null
+  pro_plan?: string | null
+  pro_reference?: string | null
   meal_lock_hour: number
   created_by: string
 }
@@ -43,6 +50,13 @@ export interface MessMember {
   role: Role
   status: MemberStatus
   joined_at: string
+  /**
+   * The name this person uses in THIS mess. The profile is the account; this is
+   * the identity the mess sees, so a new mess starts from a clean name instead
+   * of inheriting one from a mess the person left.
+   */
+  display_name: string
+  avatar_url: string | null
   profile: Profile
 }
 
@@ -72,6 +86,14 @@ export interface BazarExpense {
   items_summary: string
   expense_date: string
   status: ExpenseStatus
+  /** Optional itemised list behind the free-text summary. */
+  items?: string[]
+  /** Market receipt, stored in the same private bucket as deposit proofs. */
+  proof_path?: string | null
+  /** Set instead of deleting the row, so the amount never silently disappears. */
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string
 }
 
 export interface FixedUtility {
@@ -80,6 +102,10 @@ export interface FixedUtility {
   title: string
   total_amount: number
   split_type: SplitType
+  /** Utilities are voided, never silently deleted: the row stays visible. */
+  voided_at?: string | null
+  voided_by?: string | null
+  void_reason?: string
 }
 
 export interface MemberDeposit {
@@ -92,6 +118,9 @@ export interface MemberDeposit {
   method: DepositMethod
   reference: string
   proof_path: string | null
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string
 }
 
 export interface BazarDuty {
@@ -155,6 +184,19 @@ export interface ManagerTerm {
   created_at: string
 }
 
+export interface JoinRequest {
+  id: string
+  mess_id: string
+  user_id: string
+  note: string
+  status: JoinRequestStatus
+  decided_by: string | null
+  decided_at: string | null
+  created_at: string
+  /** Joined for display by the workspace query; absent on old databases. */
+  profile?: Pick<Profile, 'full_name' | 'email' | 'avatar_url'> | null
+}
+
 export interface DepositRequest {
   id: string
   cycle_id: string
@@ -170,6 +212,47 @@ export interface DepositRequest {
   decided_by: string | null
   decided_at: string | null
   created_at: string
+}
+
+export interface DuesSettlement {
+  id: string
+  mess_id: string
+  cycle_id: string | null
+  user_id: string
+  amount: number
+  direction: SettlementDirection
+  paid_date: string
+  method: DepositMethod
+  reference: string
+  proof_path: string | null
+  note: string
+  status: SettlementStatus
+  requested_by: string | null
+  decided_by: string | null
+  decided_at: string | null
+  decision_note: string
+  created_at: string
+}
+
+/** One month of one mess, as the signed-in member sees it in their own ledger. */
+export interface LedgerRow {
+  mess_id: string
+  mess_name: string
+  currency_symbol: string
+  cycle_id: string
+  month_label: string
+  cycle_status: CycleStatus
+  member_status: MemberStatus
+  meals: number
+  meal_cost: number
+  utility_share: number
+  payable: number
+  deposits: number
+  bazar_paid: number
+  settled_in: number
+  settled_out: number
+  /** Positive: the member still owes this mess. Negative: the mess owes them. */
+  outstanding: number
 }
 
 export interface ClientError {
@@ -223,6 +306,45 @@ export interface LeaderboardRow {
   is_own: boolean
 }
 
+export interface CycleTotals {
+  cycle_id: string
+  total_meals: number
+  meal_rate: number
+  total_bazar: number
+  pending_bazar: number
+  total_utilities: number
+  total_deposits: number
+  active_members: number
+}
+
+export interface SupportMess {
+  id: string
+  name: string
+  invite_code: string
+  is_pro_mess: boolean
+  pro_until: string | null
+  pro_plan: string | null
+  pro_reference: string | null
+  member_count: number
+  cycle_label: string | null
+  cycle_status: CycleStatus | null
+  created_at: string
+}
+
+export interface SupportError {
+  id: string
+  message: string
+  route: string
+  created_at: string
+  mess_name: string | null
+}
+
+export interface SupportOverview {
+  allowed: boolean
+  messes: SupportMess[]
+  errors: SupportError[]
+}
+
 export interface Workspace {
   profile: Profile
   mess: Mess
@@ -242,6 +364,15 @@ export interface Workspace {
   bans: MessBan[]
   managerTerms: ManagerTerm[]
   depositRequests: DepositRequest[]
+  settlements: DuesSettlement[]
+  joinRequests: JoinRequest[]
+}
+
+export interface LiveChange {
+  table: string
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  row: Record<string, unknown> | null
+  oldRow: Record<string, unknown> | null
 }
 
 export type MealField = 'breakfast' | 'lunch' | 'dinner' | 'guest_meals'
