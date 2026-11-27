@@ -93,6 +93,39 @@ html.dark .nav-link-active {
   color: #d1f7ec;
   box-shadow: inset 0 0 0 1px rgba(112, 219, 198, 0.25);
 }
+
+html.dark .hud-panel {
+  background-color: var(--dark-surface);
+  border-color: var(--dark-line);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 18px 40px -30px rgba(0, 0, 0, 0.9);
+}
+html.dark .hud-kicker {
+  color: #70dbc6;
+}
+html.dark .rail-link {
+  color: #93aebd;
+}
+html.dark .rail-link:hover {
+  color: #e5edf1;
+  background-image: linear-gradient(90deg, rgba(22, 163, 148, 0.12), transparent);
+}
+html.dark .rail-icon {
+  background-color: var(--dark-sunken);
+  border-color: var(--dark-line);
+  color: #93aebd;
+}
+html.dark .rail-link:hover .rail-icon {
+  background-color: rgba(22, 163, 148, 0.18);
+  border-color: rgba(112, 219, 198, 0.3);
+  color: #d1f7ec;
+}
+html.dark .rail-link-active {
+  color: #f4f7f9;
+  background-image: linear-gradient(90deg, rgba(22, 163, 148, 0.24), rgba(22, 163, 148, 0.06));
+  box-shadow: inset 0 0 0 1px rgba(112, 219, 198, 0.25);
+}
 html.dark .table-head {
   color: #93aebd;
 }
@@ -230,7 +263,58 @@ html.dark [class~='text-emerald-800'] {
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-ink-100 bg-white shadow-card;
+    @apply rounded-[18px] border border-ink-100 bg-white;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 1px 2px rgba(15, 43, 61, 0.04),
+      0 12px 28px -22px rgba(15, 43, 61, 0.6);
+  }
+
+  /* A HUD panel is the same surface as a card, but lit along the top edge so
+     a section reads as a game panel instead of a spreadsheet box. */
+  .hud-panel {
+    @apply relative overflow-hidden rounded-[20px] border border-ink-100 bg-white;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.8) inset,
+      0 18px 40px -30px rgba(15, 43, 61, 0.7);
+  }
+
+  .hud-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: linear-gradient(90deg, #16a394 0%, #39c2ac 34%, rgba(57, 194, 172, 0) 80%);
+  }
+
+  .hud-kicker {
+    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-brand-700;
+  }
+
+  /* Sidebar rows carry an icon plate, so the active screen reads as a
+     selected loadout slot rather than a tinted line of text. */
+  .rail-link {
+    @apply flex items-center gap-3 rounded-2xl px-2 py-1.5 text-sm font-bold text-ink-500 transition;
+  }
+  .rail-link:hover {
+    @apply text-ink-800;
+    background-image: linear-gradient(90deg, rgba(15, 43, 61, 0.05), transparent);
+  }
+  .rail-icon {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-ink-100 bg-ink-50 text-ink-500 transition;
+  }
+  .rail-link:hover .rail-icon {
+    @apply border-brand-200 bg-white text-brand-700;
+  }
+  .rail-link-active {
+    @apply text-ink-900;
+    background-image: linear-gradient(90deg, rgba(22, 163, 148, 0.16), rgba(22, 163, 148, 0.03));
+    box-shadow: inset 0 0 0 1px rgba(22, 163, 148, 0.18);
+  }
+  .rail-link-active .rail-icon {
+    @apply border-transparent text-white;
+    background-image: linear-gradient(140deg, #16a394 0%, #0d6963 100%);
+    box-shadow: 0 8px 16px -10px rgba(12, 130, 121, 0.9);
   }
 
   .field {
@@ -277,6 +361,32 @@ html.dark [class~='text-emerald-800'] {
   .app-main {
     padding-bottom: 2.5rem;
   }
+}
+
+/* ---- App shell -------------------------------------------------------
+   The signed-in area sits on a lit surface with two soft light sources,
+   so screens feel like a place instead of a blank document. */
+.app-shell {
+  background-color: #edf2f5;
+  background-image:
+    radial-gradient(58rem 32rem at 108% -12%, rgba(22, 163, 148, 0.16), transparent 62%),
+    radial-gradient(44rem 26rem at -12% 108%, rgba(251, 93, 18, 0.1), transparent 60%);
+}
+
+html.dark .app-shell {
+  background-color: #071923;
+  background-image:
+    radial-gradient(58rem 32rem at 108% -12%, rgba(22, 163, 148, 0.22), transparent 62%),
+    radial-gradient(44rem 26rem at -12% 108%, rgba(251, 93, 18, 0.12), transparent 60%);
+}
+
+/* Segment marks over a progress fill turn a plain meter into a boss bar. */
+.hud-segments {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 11px,
+    rgba(2, 9, 13, 0.35) 11px 13px
+  );
 }
 
 /* Phones: 16px inputs stop iOS from zooming the page on focus, and 44px is the

@@ -59,7 +59,8 @@ export function Hub() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.hub')}</h1>
+        <p className="hud-kicker">{t('hub.kicker')}</p>
+        <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.hub')}</h1>
         <p className="mt-1 text-sm text-ink-500">{t('hub.subtitle')}</p>
       </div>
 
@@ -108,10 +109,11 @@ function BoardTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <div className="card flex h-[calc(100dvh-15rem)] min-h-[26rem] flex-col overflow-hidden lg:h-[70vh]">
+      <div className="hud-panel flex h-[calc(100dvh-15rem)] min-h-[26rem] flex-col lg:h-[70vh]">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
           <div>
-            <p className="text-sm font-extrabold text-ink-900">{t('hub.boardTitle')}</p>
+            <p className="hud-kicker">{t('hub.tabBoard')}</p>
+            <p className="mt-0.5 text-sm font-extrabold text-ink-900">{t('hub.boardTitle')}</p>
             <p className="text-[11px] text-ink-400">{t('hub.kept', { count: messages.length })}</p>
           </div>
           <Pill tone="brand">
@@ -143,7 +145,7 @@ function BoardTab() {
                         message.is_announcement
                           ? 'border border-amber-200 bg-amber-50 text-amber-900'
                           : mine
-                            ? 'bg-brand-600 text-white'
+                            ? 'bg-gradient-to-br from-brand-600 to-brand-700 text-white shadow-[0_8px_18px_-14px_rgba(12,130,121,0.9)]'
                             : 'bg-ink-100 text-ink-800'
                       }`}
                     >
@@ -199,7 +201,7 @@ function BoardTab() {
       </div>
 
       <div className="space-y-3">
-        <div className="card p-4">
+        <div className="hud-panel p-4">
           <SectionHeading title={t('hub.announcements')} hint={t('hub.announcementsHint')} />
           <div className="space-y-2">
             {ws.messages
@@ -220,7 +222,7 @@ function BoardTab() {
           </div>
         </div>
 
-        <div className="card p-4">
+        <div className="hud-panel p-4">
           <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink-700">
             <ShieldCheck className="h-3.5 w-3.5 text-brand-600" /> {t('hub.freeTierSafe')}
           </p>
@@ -306,12 +308,12 @@ function RosterTab() {
             const member = memberOf(duty.assigned_user_id)
             const isMine = duty.assigned_user_id === user.id
             return (
-              <div key={duty.id} className={`card p-4 ${isMine ? 'border-amber-200 bg-amber-50/40' : ''}`}>
+              <div key={duty.id} className={`hud-panel p-4 ${isMine ? 'ring-1 ring-amber-300/70' : ''}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-white shadow-sm">
-                      <span className="text-[9px] font-bold uppercase text-ink-400">{shortDate(duty.scheduled_date).split(' ')[1]}</span>
-                      <span className="text-sm font-extrabold leading-none text-ink-900">{shortDate(duty.scheduled_date).split(' ')[0]}</span>
+                    <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-[0_8px_16px_-12px_rgba(12,130,121,0.9)]">
+                      <span className="text-[8px] font-bold uppercase opacity-80">{shortDate(duty.scheduled_date).split(' ')[1]}</span>
+                      <span className="text-sm font-extrabold leading-none">{shortDate(duty.scheduled_date).split(' ')[0]}</span>
                     </div>
                     <div>
                       <p className="text-xs font-extrabold text-ink-900">
@@ -383,7 +385,7 @@ function RosterTab() {
 
       <div>
         <SectionHeading title={t('hub.dutyHistory')} />
-        <div className="card divide-y divide-ink-100">
+        <div className="hud-panel divide-y divide-ink-100">
           {history.length === 0 ? (
             <p className="px-4 py-3 text-xs text-ink-400">{t('hub.nothingCompleted')}</p>
           ) : (
@@ -526,7 +528,7 @@ function CouncilTab() {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="card p-4">
+        <div className="hud-panel p-4">
           <SectionHeading
             title={t('gov.manager')}
             hint={t('gov.managerHint')}
@@ -566,7 +568,7 @@ function CouncilTab() {
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">{t('gov.managerMoney')}</p>
         </div>
 
-        <div className="card p-4">
+        <div className="hud-panel p-4">
           <SectionHeading title={t('gov.requests')} hint={t('gov.requestsHint')} />
           {myRequest ? (
             <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
@@ -669,7 +671,7 @@ function CouncilTab() {
       </div>
 
       {isAdmin ? (
-        <div className="card p-4">
+        <div className="hud-panel p-4">
           <SectionHeading title={t('gov.removal')} hint={t('gov.removalHint')} />
           <div className="grid gap-2 sm:grid-cols-2">
             {active
@@ -712,8 +714,11 @@ function CouncilTab() {
               const elected = poll.kind === 'manager_selection' ? managerWinner(poll, ws.votes, activeCount) : null
 
               return (
-                <div key={poll.id} className="card p-4">
-                  <div className="flex items-start justify-between gap-2">
+                <div key={poll.id} className="hud-panel p-4">
+                  <p className="hud-kicker">
+                    {poll.kind === 'member_removal' ? t('gov.removal') : t('gov.electionTitle')}
+                  </p>
+                  <div className="mt-1.5 flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-extrabold leading-snug text-ink-900">{poll.question}</p>
                       <p className="mt-1 text-[10px] text-ink-400">

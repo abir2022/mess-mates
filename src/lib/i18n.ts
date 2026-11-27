@@ -58,6 +58,13 @@ const en = {
   'auth.featurePolls': 'Democratic mess polls',
   'auth.featureArena': 'Chess & dice arena',
   'auth.security': "Row-Level Security keeps every mess's data private. Installable as a PWA.",
+  'auth.gateKicker': 'Level 1 · Hostel life',
+  'auth.gateTitle': 'Your mess. Your squad. Month-end boss.',
+  'auth.gateBody':
+    'Meals, bazar runs, deposits and dues in one place, so the group chat can go back to memes instead of receipts.',
+  'auth.gateChipBoss': 'Month-end boss',
+  'auth.gatePanelKicker': 'Continue your save',
+  'auth.gateTrust': 'No card needed · Installs as an app · Works offline',
   'auth.signIn': 'Sign in',
   'auth.signInSub': 'One account, all your messes.',
   'auth.demoMode': 'Demo mode',
@@ -256,6 +263,7 @@ const en = {
   'meals.tooLarge': 'That receipt is larger than 2 MB. Please attach a smaller screenshot.',
   'meals.proofGone': 'That receipt can no longer be opened.',
 
+  'arena.kicker': 'Game night · Squad arena',
   'arena.subtitle': 'Mess democracy, mini-games and the guild leaderboard.',
   'arena.guildPoints': '{points} guild points',
   'arena.tabPolls': 'Polls',
@@ -372,6 +380,7 @@ const en = {
 
   'settle.print': 'Print / Save PDF',
   'settle.brandedPdf': 'Branded PDF',
+  'settle.kicker': 'Month-end · Final score',
   'settle.monthEnd': 'Month-end settlement',
   'settle.meta': '{month} · {count} members',
   'settle.liveDraft': 'Live draft',
@@ -404,6 +413,7 @@ const en = {
   'settle.generatedPro': 'Generated with Mess Mates Pro',
   'settle.generated': 'Generated with Mess Mates',
 
+  'hub.kicker': 'Squad HQ · Comms',
   'hub.subtitle': 'Noticeboard, bazar roster and mess settings.',
   'hub.tabBoard': 'Noticeboard',
   'hub.tabRoster': 'Bazar roster',
@@ -743,6 +753,13 @@ const bn: Record<MessageKey, string> = {
   'auth.featurePolls': 'গণতান্ত্রিক মেস ভোট',
   'auth.featureArena': 'দাবা ও ডাইস অ্যারিনা',
   'auth.security': 'রো-লেভেল সিকিউরিটি প্রতিটি মেসের তথ্য গোপন রাখে। PWA হিসেবে ইনস্টল করা যায়।',
+  'auth.gateKicker': 'লেভেল ১ · হোস্টেল লাইফ',
+  'auth.gateTitle': 'আপনার মেস। আপনার স্কোয়াড। মাস শেষের বস।',
+  'auth.gateBody':
+    'মিল, বাজার, জমা আর বাকি — সব এক জায়গায়। গ্রুপ চ্যাটে রসিদের বদলে মিম ফিরুক।',
+  'auth.gateChipBoss': 'মাস শেষের বস',
+  'auth.gatePanelKicker': 'আপনার সেভ চালিয়ে যান',
+  'auth.gateTrust': 'কার্ড লাগবে না · অ্যাপ হিসেবে ইনস্টল হয় · অফলাইনেও চলে',
   'auth.signIn': 'সাইন ইন',
   'auth.signInSub': 'একটি অ্যাকাউন্ট, আপনার সব মেস।',
   'auth.demoMode': 'ডেমো মোড',
@@ -941,6 +958,7 @@ const bn: Record<MessageKey, string> = {
   'meals.tooLarge': 'রসিদটি ২ MB-এর বেশি। ছোট স্ক্রিনশট সংযুক্ত করুন।',
   'meals.proofGone': 'এই রসিদটি আর খোলা যাচ্ছে না।',
 
+  'arena.kicker': 'গেম নাইট · স্কোয়াড অ্যারেনা',
   'arena.subtitle': 'মেসের গণতন্ত্র, মিনি গেম আর গিল্ড লিডারবোর্ড।',
   'arena.guildPoints': '{points} গিল্ড পয়েন্ট',
   'arena.tabPolls': 'ভোট',
@@ -1057,6 +1075,7 @@ const bn: Record<MessageKey, string> = {
 
   'settle.print': 'প্রিন্ট / PDF সংরক্ষণ',
   'settle.brandedPdf': 'ব্র্যান্ডেড PDF',
+  'settle.kicker': 'মাস শেষ · চূড়ান্ত স্কোর',
   'settle.monthEnd': 'মাস শেষের নিষ্পত্তি',
   'settle.meta': '{month} · {count} জন সদস্য',
   'settle.liveDraft': 'চলমান খসড়া',
@@ -1089,6 +1108,7 @@ const bn: Record<MessageKey, string> = {
   'settle.generatedPro': 'মেস মেটস প্রো দিয়ে তৈরি',
   'settle.generated': 'মেস মেটস দিয়ে তৈরি',
 
+  'hub.kicker': 'স্কোয়াড হেডকোয়ার্টার · যোগাযোগ',
   'hub.subtitle': 'নোটিশ বোর্ড, বাজার রোস্টার ও মেস সেটিংস।',
   'hub.tabBoard': 'নোটিশ বোর্ড',
   'hub.tabRoster': 'বাজার রোস্টার',

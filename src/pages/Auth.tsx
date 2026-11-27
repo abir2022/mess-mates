@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
-  BarChart3,
   Check,
   ChevronRight,
   Crown,
   Dice5,
+  Flame,
+  Gamepad2,
   Mail,
   ShieldCheck,
   Swords,
@@ -38,65 +39,84 @@ export function AuthScreen() {
   const [email, setEmail] = useState('')
   const [showEmail, setShowEmail] = useState(false)
 
+  const chips = [
+    { icon: Utensils, label: t('auth.featureRate') },
+    { icon: Flame, label: t('auth.gateChipBoss') },
+    { icon: Vote, label: t('auth.featurePolls') },
+    { icon: Swords, label: t('auth.featureArena') },
+  ]
+
   return (
-    <div className="min-h-dvh bg-ink-50 md:grid md:grid-cols-[1.1fr_1fr]">
-      <section className="relative order-2 overflow-hidden bg-guild-hero px-5 py-8 text-white sm:px-6 md:order-1 md:flex md:flex-col md:justify-between md:px-12 md:py-14">
-        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-400/20 blur-3xl" />
-        <div className="absolute -bottom-32 -left-16 h-72 w-72 rounded-full bg-flame-500/20 blur-3xl" />
+    <div className="relative min-h-dvh overflow-hidden bg-ink-900 text-white">
+      {/* The corridor poster is the whole first impression, so it runs edge to
+          edge behind both columns and only fades out under the form. */}
+      <img
+        src="/app/gate.jpg"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
+      />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink-900/55 via-ink-900/80 to-ink-900 md:bg-gradient-to-r md:from-ink-900/95 md:via-ink-900/75 md:to-ink-900/35" />
 
-        <div className="relative">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-white/95 p-2 shadow-lg">
-              <img src="/logo.png" alt="Mess Mates" className="h-10 w-10 rounded-lg object-cover" />
-            </div>
-            <div>
-              <p className="text-lg font-extrabold tracking-tight">Mess Mates</p>
-              <p className="text-[11px] font-semibold text-brand-100/80">{t('app.tagline')}</p>
-            </div>
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 pb-6 pt-5 sm:px-6 md:px-8 md:pb-8 md:pt-6">
+        <header className="flex items-center justify-between gap-3">
+          <Link to="/" className="flex items-center gap-2.5">
+            <img
+              src="/logo.png"
+              alt=""
+              className="h-10 w-10 rounded-xl object-cover ring-1 ring-white/25"
+            />
+            <span>
+              <span className="block text-base font-extrabold leading-tight tracking-tight">
+                Mess Mates
+              </span>
+              <span className="block text-[11px] font-semibold text-brand-200/80">
+                {t('app.tagline')}
+              </span>
+            </span>
+          </Link>
+          <LanguageToggle />
+        </header>
+
+        <div className="grid flex-1 items-center gap-8 py-7 md:grid-cols-[1.1fr_minmax(340px,400px)] md:gap-12 md:py-10">
+          <div className="max-w-xl">
+            <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-100 backdrop-blur">
+              <Gamepad2 className="h-3.5 w-3.5" />
+              {t('auth.gateKicker')}
+            </p>
+            <h1 className="mt-4 text-[30px] font-extrabold leading-[1.08] tracking-tight sm:text-4xl md:text-[3.1rem]">
+              {t('auth.gateTitle')}
+            </h1>
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-white/75 sm:text-base">
+              {t('auth.gateBody')}
+            </p>
+
+            <ul className="mt-6 flex flex-wrap gap-2">
+              {chips.map((chip) => (
+                <li
+                  key={chip.label}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.07] px-2.5 py-1.5 text-xs font-bold text-white/85 backdrop-blur"
+                >
+                  <chip.icon className="h-3.5 w-3.5 text-brand-300" />
+                  {chip.label}
+                </li>
+              ))}
+            </ul>
+
+            <p className="mt-6 hidden items-center gap-2 text-[11px] font-semibold text-white/55 md:flex">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-brand-300" />
+              {t('auth.security')}
+            </p>
           </div>
 
-          <h1 className="mt-6 max-w-lg text-[26px] font-extrabold leading-tight sm:text-3xl md:mt-12 md:text-[2.6rem]">
-            {t('auth.headline1')}
-            <br />
-            {t('auth.headline2')}
-            <span className="block text-brand-200">{t('auth.headline3')}</span>
-          </h1>
-          <p className="mt-3 max-w-md text-sm text-brand-50/80">{t('auth.intro')}</p>
-
-          <div className="mt-6 grid max-w-md grid-cols-2 gap-2.5">
-            {[
-              { icon: BarChart3, label: t('auth.featureRate') },
-              { icon: Utensils, label: t('auth.featureGrid') },
-              { icon: Vote, label: t('auth.featurePolls') },
-              { icon: Swords, label: t('auth.featureArena') },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-xs font-semibold backdrop-blur">
-                <item.icon className="h-4 w-4 text-brand-200" />
-                {item.label}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="relative mt-10 hidden items-center gap-3 text-[11px] text-brand-100/70 md:flex">
-          <ShieldCheck className="h-4 w-4" />
-          {t('auth.security')}
-        </div>
-      </section>
-
-      <section className="order-1 flex items-center justify-center px-4 py-6 md:order-2 md:px-10 md:py-10">
-        <div className="w-full max-w-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <Link to="/" className="text-[11px] font-bold text-ink-400 transition hover:text-brand-700">
-              ← Mess Mates
-            </Link>
-            <LanguageToggle />
-          </div>
-          <div className="card p-6">
-            <div className="mb-5 flex items-center justify-between">
+          <div className="hud-panel p-5 text-ink-900 sm:p-6">
+            <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-extrabold text-ink-900">{t('auth.signIn')}</h2>
-                <p className="mt-1 text-xs text-ink-500">{t('auth.signInSub')}</p>
+                <p className="hud-kicker">{t('auth.gatePanelKicker')}</p>
+                <h2 className="mt-1 text-xl font-extrabold tracking-tight text-ink-900">
+                  {t('auth.signIn')}
+                </h2>
+                <p className="mt-0.5 text-xs text-ink-500">{t('auth.signInSub')}</p>
               </div>
               {isDemo ? (
                 <Pill tone="warn">{t('auth.demoMode')}</Pill>
@@ -151,34 +171,41 @@ export function AuthScreen() {
               </div>
             )}
 
-            {error ? <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">{error}</p> : null}
+            {error ? (
+              <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600">
+                {error}
+              </p>
+            ) : null}
 
             <ul className="mt-5 space-y-1.5 border-t border-ink-100 pt-4 text-[11px] text-ink-500">
-              {[t('auth.bullet1'), t('auth.bullet2'), t('auth.bullet3')].map(
-                (line) => (
-                  <li key={line} className="flex items-start gap-1.5">
-                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" />
-                    {line}
-                  </li>
-                ),
-              )}
+              {[t('auth.bullet1'), t('auth.bullet2'), t('auth.bullet3')].map((line) => (
+                <li key={line} className="flex items-start gap-1.5">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" />
+                  {line}
+                </li>
+              ))}
             </ul>
-          </div>
 
-          <p className="mt-4 text-center text-[11px] text-ink-400">
-            {t('auth.footer')}
-          </p>
-          <p className="mt-1 text-center text-[11px] font-semibold">
-            <Link to="/privacy" className="text-brand-700 hover:text-brand-800">
+            <p className="mt-4 flex items-center justify-center gap-1.5 border-t border-dashed border-ink-100 pt-3 text-center text-[10px] font-semibold text-ink-400">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-brand-500" />
+              {t('auth.gateTrust')}
+            </p>
+          </div>
+        </div>
+
+        <footer className="flex flex-col items-center gap-1.5 text-[11px] text-white/45 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-center sm:text-left">{t('auth.footer')}</p>
+          <p className="flex items-center gap-3 font-semibold">
+            <Link to="/privacy" className="text-white/60 transition hover:text-white">
               {t('legal.privacyTitle')}
             </Link>
-            <span className="mx-1.5 text-ink-300">·</span>
-            <Link to="/terms" className="text-brand-700 hover:text-brand-800">
+            <span className="text-white/25">·</span>
+            <Link to="/terms" className="text-white/60 transition hover:text-white">
               {t('legal.termsTitle')}
             </Link>
           </p>
-        </div>
-      </section>
+        </footer>
+      </div>
     </div>
   )
 }

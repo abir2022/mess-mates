@@ -69,11 +69,12 @@ export function Settlement() {
       </div>
 
       <div className="card overflow-hidden bg-white p-4 print-full sm:p-6">
+        <div className="-mx-4 -mt-4 mb-5 h-1.5 bg-gradient-to-r from-brand-500 via-brand-400 to-flame-500 sm:-mx-6 sm:-mt-6" />
         <header className="flex flex-wrap items-start justify-between gap-4 border-b border-ink-100 pb-5">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="Mess Mates" className="h-12 w-12 rounded-xl object-cover" />
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-600">{t('settle.monthEnd')}</p>
+              <p className="hud-kicker">{t('settle.kicker')}</p>
               <h1 className="text-xl font-extrabold leading-tight text-ink-900">{ws.mess.name}</h1>
               <p className="text-xs text-ink-500">
                 {t('settle.meta', {
@@ -100,9 +101,9 @@ export function Settlement() {
             { label: t('dash.deposits'), value: money(settlement.totalDeposits, symbol) },
             { label: t('settle.utilityPerMember'), value: money(settlement.utilityShare, symbol) },
           ].map((stat) => (
-            <div key={stat.label} className="rounded-xl border border-ink-100 bg-ink-50/50 px-3 py-2">
+            <div key={stat.label} className="rounded-xl border border-ink-100 bg-ink-50/60 px-3 py-2.5">
               <p className="text-[9px] font-bold uppercase tracking-wide text-ink-400">{stat.label}</p>
-              <p className="mt-0.5 text-sm font-extrabold tabular-nums text-ink-900">{stat.value}</p>
+              <p className="mt-1 text-base font-extrabold leading-none tabular-nums text-ink-900">{stat.value}</p>
             </div>
           ))}
         </div>
@@ -145,9 +146,11 @@ export function Settlement() {
                   key={`${transfer.fromUserId}-${transfer.toUserId}`}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-[13px]"
                 >
-                  <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate font-bold text-ink-900">{transfer.from}</span>
-                    <span className="text-ink-300">→</span>
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-[11px] font-black text-brand-700">
+                      →
+                    </span>
                     <span className="truncate font-bold text-brand-700">{transfer.to}</span>
                   </span>
                   <span className="shrink-0 font-extrabold tabular-nums text-ink-900">
@@ -276,7 +279,7 @@ export function Settlement() {
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-rose-500">{t('settle.totalDues')}</p>
-            <p className="text-lg font-extrabold tabular-nums text-rose-700">{money(settlement.due, symbol)}</p>
+            <p className="text-2xl font-extrabold tabular-nums text-rose-700">{money(settlement.due, symbol)}</p>
             <p className="mt-1 text-[10px] text-rose-500">{t('settle.duesBody')}</p>
             {settlement.carriedDue > 0 ? (
               <p className="mt-0.5 text-[10px] font-semibold text-rose-600">
@@ -286,7 +289,7 @@ export function Settlement() {
           </div>
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">{t('settle.totalRefundable')}</p>
-            <p className="text-lg font-extrabold tabular-nums text-emerald-700">{money(settlement.refundable, symbol)}</p>
+            <p className="text-2xl font-extrabold tabular-nums text-emerald-700">{money(settlement.refundable, symbol)}</p>
             <p className="mt-1 text-[10px] text-emerald-600">{t('settle.refundableBody')}</p>
           </div>
         </div>

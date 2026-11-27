@@ -10,6 +10,7 @@ import {
   Lock,
   Paperclip,
   Plus,
+  ShoppingBasket,
   Trash2,
   UtensilsCrossed,
   Wallet,
@@ -107,7 +108,8 @@ export function MealsBazar() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.meals')}</h1>
+          <p className="hud-kicker">{cycle.status === 'open' ? t('dash.liveCycle') : t('dash.archivedCycle')}</p>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.meals')}</h1>
           <p className="mt-1 text-sm text-ink-500">{t('meals.subtitle', { month: cycle.month_label })}</p>
         </div>
         <Pill tone={cycle.status === 'open' ? 'success' : 'neutral'}>
@@ -130,34 +132,87 @@ export function MealsBazar() {
         <div className="space-y-4">
           <StandingPlanCard />
 
-          <div className="card flex flex-wrap items-center justify-between gap-3 p-3">
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <button
-                onClick={() => setDate((current) => addDays(current, -1))}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
-                aria-label={t('meals.prevDay')}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <div className="flex items-center gap-2 rounded-lg border border-ink-200 px-3 py-1.5">
-                <CalendarDays className="h-4 w-4 text-ink-400" />
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => setDate(event.target.value)}
-                  className="w-[126px] min-w-0 border-none bg-transparent text-xs font-bold text-ink-800 outline-none sm:w-[136px]"
-                />
+          <div className="hud-panel p-3 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <button
+                  onClick={() => setDate((current) => addDays(current, -1))}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-ink-200 bg-white p-2.5 text-ink-500 transition hover:border-brand-300 hover:text-brand-700"
+                  aria-label={t('meals.prevDay')}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-1.5">
+                  <CalendarDays className="h-4 w-4 text-ink-400" />
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(event) => setDate(event.target.value)}
+                    className="w-[126px] min-w-0 border-none bg-transparent text-xs font-bold text-ink-800 outline-none sm:w-[136px]"
+                  />
+                </div>
+                <button
+                  onClick={() => setDate((current) => addDays(current, 1))}
+                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-ink-200 bg-white p-2.5 text-ink-500 transition hover:border-brand-300 hover:text-brand-700"
+                  aria-label={t('meals.nextDay')}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <Button size="sm" variant="ghost" onClick={() => setDate(todayISO())}>
+                  {t('meals.today')}
+                </Button>
               </div>
-              <button
-                onClick={() => setDate((current) => addDays(current, 1))}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-ink-200 p-2.5 text-ink-500 transition hover:bg-ink-50"
-                aria-label={t('meals.nextDay')}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-              <Button size="sm" variant="ghost" onClick={() => setDate(todayISO())}>
-                {t('meals.today')}
-              </Button>
+
+              <div className="flex items-center gap-2.5">
+                <Pill tone={locked ? 'danger' : 'success'}>
+                  {locked ? <Lock className="h-3 w-3" /> : <Check className="h-3 w-3" />}
+                  {cycle.status === 'closed'
+                    ? t('meals.cycleClosed')
+                    : locked
+                      ? t('meals.locked')
+                      : t('meals.editable')}
+                </Pill>
+                <div className="text-right">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-ink-400">{weekdayShort(date)}</p>
+                  <p className="text-lg font-extrabold leading-none tabular-nums text-ink-900">
+                    {formatMeals(dayTotal)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-3 text-[9px] font-bold uppercase tracking-wide text-ink-400">{t('meals.week')}</p>
+            <div className="mt-1 grid grid-cols-7 gap-1.5">
+              {week.map((day) => {
+                const total = weekTotals.get(day) ?? 0
+                const selected = day === date
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setDate(day)}
+                    aria-pressed={selected}
+                    className={`relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 overflow-hidden rounded-xl border px-0.5 py-1.5 transition ${
+                      selected
+                        ? 'border-transparent bg-gradient-to-b from-brand-600 to-brand-700 text-white shadow-[0_10px_18px_-12px_rgba(12,130,121,0.9)]'
+                        : 'border-ink-100 bg-ink-50/70 text-ink-600 hover:border-brand-200 hover:bg-brand-50'
+                    }`}
+                  >
+                    <span className="relative text-[9px] font-bold uppercase tracking-wide opacity-75">
+                      {weekdayShort(day).slice(0, 2)}
+                    </span>
+                    <span className="relative text-xs font-extrabold tabular-nums">
+                      {total ? formatMeals(total).replace(/\.0$/, '') : '—'}
+                    </span>
+                    {selected ? (
+                      <span className="hud-segments pointer-events-none absolute inset-0 opacity-25" />
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 pt-3">
               <Button
                 size="sm"
                 variant="secondary"
@@ -168,53 +223,12 @@ export function MealsBazar() {
                 <Copy className="h-3.5 w-3.5" />
                 {t('meals.copyPrev')}
               </Button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Pill tone={locked ? 'danger' : 'success'}>
-                {locked ? <Lock className="h-3 w-3" /> : <Check className="h-3 w-3" />}
-                {cycle.status === 'closed'
-                  ? t('meals.cycleClosed')
-                  : locked
-                    ? t('meals.locked')
-                    : t('meals.editable')}
-              </Pill>
-              <span className="text-xs font-semibold text-ink-500">
-                {weekdayShort(date)} ·{' '}
-                <span className="font-extrabold text-ink-800">{t('meals.count', { count: formatMeals(dayTotal) })}</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="card p-2">
-            <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wide text-ink-400">
-              {t('meals.week')}
-            </p>
-            <div className="grid grid-cols-7 gap-1">
-              {week.map((day) => {
-                const total = weekTotals.get(day) ?? 0
-                const selected = day === date
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => setDate(day)}
-                    aria-pressed={selected}
-                    className={`flex min-h-11 flex-col items-center justify-center rounded-lg px-0.5 py-1 transition ${
-                      selected
-                        ? 'bg-brand-600 text-white'
-                        : 'bg-ink-50 text-ink-600 hover:bg-ink-100'
-                    }`}
-                  >
-                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">
-                      {weekdayShort(day).slice(0, 2)}
-                    </span>
-                    <span className="text-xs font-extrabold tabular-nums">
-                      {total ? formatMeals(total).replace(/\.0$/, '') : '—'}
-                    </span>
-                  </button>
-                )
-              })}
+              <p className="text-[11px] font-semibold text-ink-500">
+                {t('meals.dayValue', { rate: money(settlement.mealRate, symbol) })}{' '}
+                <span className="text-sm font-extrabold tabular-nums text-ink-900">
+                  {money(dayTotal * settlement.mealRate, symbol)}
+                </span>
+              </p>
             </div>
           </div>
 
@@ -225,50 +239,48 @@ export function MealsBazar() {
             </p>
           ) : null}
 
-          <div className="card divide-y divide-ink-100">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {activeMembers.map((member) => {
               const rowMeals = dayMeals.filter((meal) => meal.user_id === member.user_id)
               const rowTotal = rowMeals.reduce((sum, meal) => sum + mealTotal(meal), 0)
               const isMe = member.user_id === user.id
               return (
-                <div key={member.user_id} className={`p-4 ${isMe ? 'bg-brand-50/30' : ''}`}>
+                <div
+                  key={member.user_id}
+                  className={`hud-panel p-3.5 ${isMe ? 'ring-1 ring-brand-400/50' : ''}`}
+                >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex min-w-0 items-center gap-2.5">
                       <Avatar name={memberName(member)} url={memberAvatar(member)} frame={member.profile.avatar_frame} size="sm" />
-                      <div>
-                        <p className="text-xs font-bold text-ink-900">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-bold text-ink-900">
                           {memberName(member)} {isMe ? <span className="text-brand-600">{t('dash.you')}</span> : null}
                         </p>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">{t(`role.${member.role}`)}</p>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-ink-400">{t(`role.${member.role}`)}</p>
                       </div>
                     </div>
-                    <Pill tone="brand">{t('meals.count', { count: formatMeals(rowTotal) })}</Pill>
+                    <Pill tone="brand">{formatMeals(rowTotal)}</Pill>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-1 gap-1.5 xs:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-3 grid grid-cols-2 gap-1.5">
                     {mealFields.map((entry) => (
-                      <div key={entry.field} className="flex items-center justify-between gap-2 rounded-lg bg-ink-50 px-2.5 py-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-ink-500">{t(entry.label)}</span>
-                        <Stepper
-                          value={mealValue(member.user_id, entry.field)}
-                          step={entry.step}
-                          max={entry.max}
-                          disabled={locked || busy}
-                          onChange={(next) => updateMeal(member.user_id, entry.field, next)}
-                        />
+                      <div key={entry.field} className="rounded-xl border border-ink-100 bg-ink-50/70 px-2 py-1.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-ink-500">{t(entry.label)}</p>
+                        <div className="mt-1 flex justify-center">
+                          <Stepper
+                            value={mealValue(member.user_id, entry.field)}
+                            step={entry.step}
+                            max={entry.max}
+                            disabled={locked || busy}
+                            onChange={(next) => updateMeal(member.user_id, entry.field, next)}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )
             })}
-          </div>
-
-          <div className="card flex items-center justify-between p-4">
-            <p className="text-xs font-semibold text-ink-500">
-              {t('meals.dayValue', { rate: money(settlement.mealRate, symbol) })}
-            </p>
-            <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(dayTotal * settlement.mealRate, symbol)}</p>
           </div>
         </div>
       ) : null}
@@ -345,11 +357,14 @@ function BazarTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
-      <div className="card h-fit p-4">
-        <SectionHeading
-          title={t('meals.bazarForm')}
-          hint={canManage ? t('meals.autoApproved') : t('meals.pendingApproval')}
-        />
+      <div className="hud-panel h-fit p-4">
+        <p className="hud-kicker">{t('meals.tabBazar')}</p>
+        <div className="mt-1.5">
+          <SectionHeading
+            title={t('meals.bazarForm')}
+            hint={canManage ? t('meals.autoApproved') : t('meals.pendingApproval')}
+          />
+        </div>
         <div className="space-y-3">
           <div>
             <label className="label">{t('meals.amount', { symbol })}</label>
@@ -411,25 +426,39 @@ function BazarTab() {
 
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div className="card p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.approvedBazar')}</p>
-            <p className="mt-1 text-lg font-extrabold tabular-nums text-ink-900">{money(approved, symbol)}</p>
+          <div className="hud-panel p-3.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                <Check className="h-3.5 w-3.5" />
+              </span>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-ink-400">{t('meals.approvedBazar')}</p>
+            </div>
+            <p className="mt-2 text-lg font-extrabold tabular-nums text-ink-900">{money(approved, symbol)}</p>
           </div>
-          <div className="card p-3.5">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.awaitingApproval')}</p>
-            <p className="mt-1 text-lg font-extrabold tabular-nums text-amber-600">{money(pending, symbol)}</p>
+          <div className="hud-panel p-3.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                <Clock className="h-3.5 w-3.5" />
+              </span>
+              <p className="text-[9px] font-bold uppercase tracking-wide text-ink-400">{t('meals.awaitingApproval')}</p>
+            </div>
+            <p className="mt-2 text-lg font-extrabold tabular-nums text-amber-600">{money(pending, symbol)}</p>
           </div>
         </div>
 
-        <div className="card divide-y divide-ink-100">
+        <div className="hud-panel divide-y divide-ink-100">
           {entries.length === 0 ? (
             <div className="p-4">
               <EmptyState icon={<Wallet className="h-4 w-4" />} title={t('meals.noBazar')} body={t('meals.noBazarBody')} />
             </div>
           ) : (
             entries.map((entry) => (
-              <div key={entry.id} className="flex items-start justify-between gap-3 p-3.5">
-                <div className="min-w-0">
+              <div key={entry.id} className="flex items-start justify-between gap-3 p-3.5 transition hover:bg-ink-50/40">
+                <div className="flex min-w-0 gap-2.5">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+                    <ShoppingBasket className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
                   <p className="text-xs font-bold text-ink-900">{entry.items_summary || t('meals.bazarExpense')}</p>
                   <p className="mt-0.5 text-[11px] text-ink-500">
                     {nameOf(entry.buyer_id)} · {shortDate(entry.expense_date)}
@@ -454,6 +483,7 @@ function BazarTab() {
                       <Paperclip className="h-3 w-3" /> {t('meals.viewReceipt')}
                     </button>
                   ) : null}
+                  </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
                   <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(Number(entry.amount), symbol)}</p>
@@ -534,11 +564,14 @@ function UtilitiesTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
-      <div className="card h-fit p-4">
-        <SectionHeading
-          title={t('meals.addUtility')}
-          hint={t('meals.splitHint', { count: settlement.memberCount })}
-        />
+      <div className="hud-panel h-fit p-4">
+        <p className="hud-kicker">{t('meals.tabUtilities')}</p>
+        <div className="mt-1.5">
+          <SectionHeading
+            title={t('meals.addUtility')}
+            hint={t('meals.splitHint', { count: settlement.memberCount })}
+          />
+        </div>
         {canManage ? (
           <div className="space-y-3">
             <div>
@@ -574,18 +607,18 @@ function UtilitiesTab() {
       </div>
 
       <div className="space-y-3">
-        <div className="card flex items-center justify-between p-4">
+        <div className="hud-panel flex items-center justify-between p-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.totalUtilities')}</p>
-            <p className="text-lg font-extrabold tabular-nums text-ink-900">{money(total, symbol)}</p>
+            <p className="text-[9px] font-bold uppercase tracking-wide text-ink-400">{t('meals.totalUtilities')}</p>
+            <p className="mt-0.5 text-xl font-extrabold tabular-nums text-ink-900">{money(total, symbol)}</p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ink-400">{t('meals.perMember')}</p>
-            <p className="text-lg font-extrabold tabular-nums text-brand-700">{money(settlement.utilityShare, symbol)}</p>
+          <div className="rounded-xl bg-brand-50 px-3 py-2 text-right">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-brand-700/70">{t('meals.perMember')}</p>
+            <p className="text-base font-extrabold tabular-nums text-brand-700">{money(settlement.utilityShare, symbol)}</p>
           </div>
         </div>
 
-        <div className="card divide-y divide-ink-100">
+        <div className="hud-panel divide-y divide-ink-100">
           {entries.length === 0 ? (
             <div className="p-4">
               <EmptyState icon={<CircleCheck className="h-4 w-4" />} title={t('meals.noUtilities')} />
@@ -593,7 +626,11 @@ function UtilitiesTab() {
           ) : (
             entries.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 p-3.5">
-                <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                    <CircleCheck className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
                   <p className={`text-xs font-bold ${entry.voided_at ? 'text-ink-400 line-through' : 'text-ink-900'}`}>
                     {entry.title}
                     {entry.voided_at ? (
@@ -606,6 +643,7 @@ function UtilitiesTab() {
                   {entry.voided_at && entry.void_reason ? (
                     <p className="text-[10px] font-semibold text-rose-500">{entry.void_reason}</p>
                   ) : null}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-extrabold tabular-nums text-ink-900">{money(Number(entry.total_amount), symbol)}</p>
@@ -731,11 +769,14 @@ function DepositsTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
-      <div className="card h-fit p-4">
-        <SectionHeading
-          title={t('meals.recordDeposit')}
-          hint={t('meals.collected', { amount: money(total, symbol) })}
-        />
+      <div className="hud-panel h-fit p-4">
+        <p className="hud-kicker">{t('meals.tabDeposits')}</p>
+        <div className="mt-1.5">
+          <SectionHeading
+            title={t('meals.recordDeposit')}
+            hint={t('meals.collected', { amount: money(total, symbol) })}
+          />
+        </div>
         <div className="space-y-3">
           <div>
             <label className="label">{t('dash.member')}</label>
@@ -896,7 +937,7 @@ function DepositsTab() {
           </div>
         ) : null}
 
-      <div className="card divide-y divide-ink-100">
+      <div className="hud-panel divide-y divide-ink-100">
         {entries.length === 0 ? (
           <div className="p-4">
             <EmptyState icon={<Wallet className="h-4 w-4" />} title={t('meals.noDeposits')} body={t('meals.noDepositsBody')} />
@@ -904,6 +945,10 @@ function DepositsTab() {
         ) : (
           entries.map((entry) => (
             <div key={entry.id} className="flex items-center justify-between gap-3 p-3.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                <Wallet className="h-4 w-4" />
+              </span>
               <div className="min-w-0">
                 <p className="text-xs font-bold text-ink-900">
                   <span className={entry.voided_at ? 'text-ink-400 line-through' : ''}>{nameOf(entry.user_id)}</span>
@@ -927,6 +972,7 @@ function DepositsTab() {
                     <Paperclip className="h-3 w-3" /> {t('meals.receipt')}
                   </button>
                 ) : null}
+              </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <p className="text-sm font-extrabold tabular-nums text-emerald-700">{money(Number(entry.amount), symbol)}</p>

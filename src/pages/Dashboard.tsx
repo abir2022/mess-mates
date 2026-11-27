@@ -89,7 +89,7 @@ export function Dashboard() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-400">
+          <p className="hud-kicker">
             {cycle.status === 'open' ? t('dash.liveCycle') : t('dash.archivedCycle')}
           </p>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">
@@ -169,11 +169,12 @@ export function Dashboard() {
               <span>{t('dash.depositsCollected', { amount: money(statDeposits, symbol) })}</span>
               <span>{t('dash.vsBazar', { amount: money(settlement.totalBazar, symbol) })}</span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-white/15">
+            <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/15">
               <div
                 className={`h-full rounded-full ${progressPct >= 100 ? 'bg-emerald-300' : 'bg-amber-300'}`}
                 style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
               />
+              <div className="hud-segments pointer-events-none absolute inset-0 opacity-40" />
             </div>
             <p className="mt-1.5 text-[10px] text-brand-100/60">
               {progressPct >= 100
@@ -249,16 +250,18 @@ export function Dashboard() {
           { icon: Wallet, label: 'dash.utilityShareLabel', value: money(statUtilityShare, symbol), tone: 'text-indigo-600 bg-indigo-50' },
           { icon: ShoppingBasket, label: 'dash.bazarPaidByMe', value: money(me?.bazarPaid ?? 0, symbol), tone: 'text-emerald-600 bg-emerald-50' },
         ].map((stat) => (
-          <div key={stat.label} className="card flex items-center gap-3 p-3.5">
-            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${stat.tone}`}>
-              <stat.icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase leading-tight tracking-wide text-ink-400">
+          <div key={stat.label} className="hud-panel p-3.5">
+            <div className="flex items-center gap-2">
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${stat.tone}`}>
+                <stat.icon className="h-4 w-4" />
+              </span>
+              <p className="min-w-0 text-[10px] font-bold uppercase leading-tight tracking-wide text-ink-400">
                 {t(stat.label as MessageKey)}
               </p>
-              <p className="truncate text-sm font-extrabold tabular-nums text-ink-900">{stat.value}</p>
             </div>
+            <p className="mt-2 truncate text-xl font-extrabold tabular-nums tracking-tight text-ink-900">
+              {stat.value}
+            </p>
           </div>
         ))}
       </div>

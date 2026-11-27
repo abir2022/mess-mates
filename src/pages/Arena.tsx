@@ -40,7 +40,8 @@ export function Arena() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.arena')}</h1>
+          <p className="hud-kicker">{t('arena.kicker')}</p>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.arena')}</h1>
           <p className="mt-1 text-sm text-ink-500">{t('arena.subtitle')}</p>
         </div>
         {ws ? (
@@ -135,9 +136,16 @@ function PollsTab() {
             const total = votes.length
             const status = closingLabel(poll.closes_at)
             return (
-              <div key={poll.id} className="card p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
+              <div key={poll.id} className="hud-panel p-4">
+                <p className="hud-kicker">
+                  {poll.kind === 'general'
+                    ? t('arena.tabPolls')
+                    : poll.kind === 'member_removal'
+                      ? t('gov.removal')
+                      : t('gov.electionTitle')}
+                </p>
+                <div className="mt-1.5 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
                     <p className="text-sm font-extrabold leading-snug text-ink-900">{poll.question}</p>
                     <p className="mt-1 text-[11px] text-ink-400">
                       {t('arena.by', { name: nameOf(poll.created_by), status: t(status.key, status.vars) })}
@@ -148,11 +156,6 @@ function PollsTab() {
                       {status.closed ? <Lock className="h-3 w-3" /> : <Vote className="h-3 w-3" />}{' '}
                       {t('arena.votes', { count: total })}
                     </Pill>
-                    {poll.kind !== 'general' ? (
-                      <Pill tone="gold">
-                        {poll.kind === 'member_removal' ? t('gov.removal') : t('gov.electionTitle')}
-                      </Pill>
-                    ) : null}
                   </div>
                 </div>
 
@@ -190,10 +193,15 @@ function PollsTab() {
                         } disabled:cursor-default`}
                       >
                         {showBars ? (
-                          <span
-                            className={`absolute inset-y-0 left-0 ${isMine ? 'bg-brand-200/60' : 'bg-ink-100'}`}
-                            style={{ width: `${pct}%` }}
-                          />
+                          <>
+                            <span
+                              className={`absolute inset-y-0 left-0 ${
+                                isMine ? 'bg-gradient-to-r from-brand-300/70 to-brand-100/40' : 'bg-ink-100/80'
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                            <span className="hud-segments pointer-events-none absolute inset-0 opacity-[0.12]" />
+                          </>
                         ) : null}
                         <span className="relative flex items-center gap-1.5 text-xs font-bold text-ink-800">
                           {isMine ? <Check className="h-3.5 w-3.5 text-brand-600" /> : null}
@@ -343,10 +351,13 @@ function GamesTab() {
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-2">
         <div className="card overflow-hidden">
-          <div className="bg-gradient-to-br from-ink-900 to-brand-700 p-4 text-white">
-            <Swords className="h-5 w-5 text-brand-200" />
-            <p className="mt-2 text-sm font-extrabold">{t('arena.chessTitle')}</p>
-            <p className="mt-0.5 text-[11px] text-brand-50/70">{t('arena.chessBody')}</p>
+          <div className="relative overflow-hidden bg-gradient-to-br from-ink-900 to-brand-700 p-4 text-white">
+            <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-brand-300/20 blur-2xl" />
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/15 backdrop-blur">
+              <Swords className="h-5 w-5 text-brand-100" />
+            </span>
+            <p className="relative mt-2.5 text-base font-extrabold">{t('arena.chessTitle')}</p>
+            <p className="relative mt-0.5 text-[11px] text-brand-50/70">{t('arena.chessBody')}</p>
           </div>
           <div className="flex items-center justify-between p-3.5">
             <Button size="sm" onClick={createChess}>
@@ -357,10 +368,13 @@ function GamesTab() {
         </div>
 
         <div className="card overflow-hidden">
-          <div className="bg-gradient-to-br from-flame-600 to-amber-500 p-4 text-white">
-            <Dice5 className="h-5 w-5" />
-            <p className="mt-2 text-sm font-extrabold">{t('arena.diceTitle')}</p>
-            <p className="mt-0.5 text-[11px] text-white/80">{t('arena.diceBody')}</p>
+          <div className="relative overflow-hidden bg-gradient-to-br from-flame-600 to-amber-500 p-4 text-white">
+            <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/20 blur-2xl" />
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 ring-1 ring-white/25 backdrop-blur">
+              <Dice5 className="h-5 w-5" />
+            </span>
+            <p className="relative mt-2.5 text-base font-extrabold">{t('arena.diceTitle')}</p>
+            <p className="relative mt-0.5 text-[11px] text-white/80">{t('arena.diceBody')}</p>
           </div>
           <div className="flex items-center justify-between p-3.5">
             <Button size="sm" variant="secondary" onClick={() => setDiceOpen(true)}>
@@ -393,7 +407,7 @@ function GamesTab() {
             </button>
           }
         />
-        <div className="card divide-y divide-ink-100">
+        <div className="hud-panel divide-y divide-ink-100">
           {rooms.length === 0 ? (
             <div className="p-4">
               <EmptyState icon={<Swords className="h-4 w-4" />} title={t('arena.noBoards')} body={t('arena.noBoardsBody')} />
@@ -406,7 +420,13 @@ function GamesTab() {
                 className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition hover:bg-brand-50/40"
               >
                 <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-100 text-ink-600">
+                  <span
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                      room.game_type === 'chess'
+                        ? 'bg-gradient-to-br from-brand-500 to-brand-700 text-white'
+                        : 'bg-gradient-to-br from-amber-400 to-flame-500 text-white'
+                    }`}
+                  >
                     {room.game_type === 'chess' ? <Swords className="h-4 w-4" /> : <Crown className="h-4 w-4" />}
                   </span>
                   <div>
@@ -585,23 +605,23 @@ function GuildTab() {
 
       <div>
         <SectionHeading title={t('arena.leaderboard')} hint={t('arena.leaderboardHint')} />
-        <div className="card divide-y divide-ink-100">
+        <div className="hud-panel divide-y divide-ink-100">
           {ws.leaderboard.map((row, index) => (
             <div key={row.id} className={`flex items-center gap-3 p-3.5 ${row.is_own ? 'bg-brand-50/50' : ''}`}>
               <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold ${
                   index === 0
-                    ? 'bg-amber-100 text-amber-700'
+                    ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-[0_8px_16px_-12px_rgba(245,158,11,0.9)]'
                     : index === 1
-                      ? 'bg-ink-200 text-ink-700'
+                      ? 'bg-gradient-to-br from-ink-200 to-ink-300 text-ink-800'
                       : index === 2
-                        ? 'bg-orange-100 text-orange-700'
+                        ? 'bg-gradient-to-br from-orange-300 to-orange-500 text-orange-950'
                         : 'bg-ink-100 text-ink-500'
                 }`}
               >
                 {index + 1}
               </span>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-50 text-lg">{row.guild_emblem}</span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-ink-100 bg-ink-50 text-lg">{row.guild_emblem}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-bold text-ink-900">
                   {row.name} {row.is_own ? <span className="text-brand-600">{t('dash.you')}</span> : null}

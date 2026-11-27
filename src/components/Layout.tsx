@@ -44,7 +44,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const activeMembers = ws.members.filter((member) => member.status === 'active').length
 
   return (
-    <div className="flex min-h-dvh flex-col bg-ink-50 md:flex-row">
+    <div className="app-shell flex min-h-dvh flex-col md:flex-row">
       <StandingPlanAutoApply />
       <aside className="no-print no-scrollbar sticky top-0 hidden h-dvh w-72 shrink-0 flex-col overflow-y-auto border-r border-ink-100 bg-white px-4 py-5 md:flex">
         <div className="flex items-center gap-3 px-2">
@@ -77,9 +77,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}
+              className={({ isActive }) => `rail-link ${isActive ? 'rail-link-active' : ''}`}
             >
-              <item.icon className="h-[18px] w-[18px] shrink-0" />
+              <span className="rail-icon">
+                <item.icon className="h-[18px] w-[18px] shrink-0" />
+              </span>
               <span className="truncate">{t(item.label)}</span>
             </NavLink>
           ))}
@@ -217,8 +219,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 {({ isActive }) => (
                   <>
                     <span
-                      className={`flex h-8 w-full max-w-[52px] items-center justify-center rounded-lg transition ${
-                        isActive ? 'bg-brand-50' : ''
+                      className={`flex h-8 w-full max-w-[52px] items-center justify-center rounded-xl transition ${
+                        isActive
+                          ? 'bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[0_8px_16px_-10px_rgba(12,130,121,0.9)]'
+                          : ''
                       }`}
                     >
                       <item.icon className="h-5 w-5" />
