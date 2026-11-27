@@ -72,7 +72,7 @@ export function QuestBoard({ onHide }: { onHide?: () => void }) {
             <Sparkles className="h-3 w-3" />
             {localDigits(banked)} / {localDigits(totalXp)} XP
           </span>
-          <span className="chip bg-brand-50 text-brand-700">{percent}%</span>
+          <span className="chip bg-brand-50 text-brand-700">{localDigits(percent)}%</span>
           {onHide ? (
             <button
               type="button"
@@ -115,7 +115,7 @@ export function QuestBoard({ onHide }: { onHide?: () => void }) {
                     className={`group flex min-h-11 items-center gap-2.5 rounded-xl border px-3 py-2 transition ${
                       quest.done
                         ? 'border-brand-100 bg-brand-50/40'
-                        : 'border-ink-100 bg-white hover:border-brand-200 hover:bg-brand-50/40'
+                        : 'border-ink-100 bg-white hover:border-brand-200 hover:bg-brand-500/5'
                     }`}
                   >
                     <span

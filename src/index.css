@@ -212,6 +212,12 @@ html.dark [class~='text-brand-800'],
 html.dark [class~='text-brand-900'] {
   color: #70dbc6;
 }
+/* Pale teal hairlines read as white glow on the dark surface, so a finished
+   row needs a translucent edge instead of the light-mode border. */
+html.dark [class~='border-brand-100'],
+html.dark [class~='border-brand-200'] {
+  border-color: rgba(22, 163, 148, 0.32);
+}
 
 html.dark [class~='bg-amber-50'] {
   background-color: rgba(245, 158, 11, 0.14);

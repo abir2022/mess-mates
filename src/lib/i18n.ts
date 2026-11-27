@@ -30,6 +30,11 @@ const en = {
   'nav.meals': 'Meals & Bazar',
   'nav.arena': 'Arena & Polls',
   'nav.hub': 'Mess Hub',
+  'nav.short.dashboard': 'Home',
+  'nav.short.meals': 'Meals',
+  'nav.short.arena': 'Arena',
+  'nav.short.hub': 'Hub',
+  'nav.short.settle': 'Settle',
 
   'layout.proGuild': 'Pro guild',
   'layout.guild': 'Guild',
@@ -752,6 +757,11 @@ const bn: Record<MessageKey, string> = {
   'nav.meals': 'মিল ও বাজার',
   'nav.arena': 'অ্যারিনা ও ভোট',
   'nav.hub': 'মেস হাব',
+  'nav.short.dashboard': 'হোম',
+  'nav.short.meals': 'মিল',
+  'nav.short.arena': 'আরেনা',
+  'nav.short.hub': 'হাব',
+  'nav.short.settle': 'হিসাব',
 
   'layout.proGuild': 'প্রো গিল্ড',
   'layout.guild': 'গিল্ড',

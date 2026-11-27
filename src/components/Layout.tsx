@@ -27,12 +27,20 @@ import { StandingPlanAutoApply } from './StandingPlan'
 import { Tutorial } from './Tutorial'
 import { CAST_IMG, tourForPath, type TourId } from '../lib/tour'
 
-const navItems: { to: string; label: MessageKey; icon: typeof LayoutDashboard; end: boolean }[] = [
-  { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, end: true },
-  { to: '/meals', label: 'nav.meals', icon: UtensilsCrossed, end: false },
-  { to: '/arena', label: 'nav.arena', icon: Swords, end: false },
-  { to: '/hub', label: 'nav.hub', icon: Users, end: false },
-  { to: '/settlement', label: 'dash.settlement', icon: Wallet, end: false },
+// The rail has room for the full names; the phone dock gets the short ones so
+// nothing is cut off in a five-tab bar at 360 px.
+const navItems: {
+  to: string
+  label: MessageKey
+  short: MessageKey
+  icon: typeof LayoutDashboard
+  end: boolean
+}[] = [
+  { to: '/', label: 'nav.dashboard', short: 'nav.short.dashboard', icon: LayoutDashboard, end: true },
+  { to: '/meals', label: 'nav.meals', short: 'nav.short.meals', icon: UtensilsCrossed, end: false },
+  { to: '/arena', label: 'nav.arena', short: 'nav.short.arena', icon: Swords, end: false },
+  { to: '/hub', label: 'nav.hub', short: 'nav.short.hub', icon: Users, end: false },
+  { to: '/settlement', label: 'dash.settlement', short: 'nav.short.settle', icon: Wallet, end: false },
 ]
 
 /**
@@ -281,7 +289,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     >
                       <item.icon className="h-5 w-5" />
                     </span>
-                    <span className="w-full truncate text-center leading-tight">{t(item.label)}</span>
+                    <span className="w-full truncate text-center leading-tight">{t(item.short)}</span>
                   </>
                 )}
               </NavLink>
