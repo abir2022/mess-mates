@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowUpRight,
@@ -7,24 +8,27 @@ import {
   Megaphone,
   MessageCircle,
   ShoppingBasket,
+  Sparkles,
   Trophy,
   Users,
   UtensilsCrossed,
   Wallet,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { GettingStarted } from '../components/GettingStarted'
+import { QuestBoard } from '../components/QuestBoard'
 import { ReminderCenter } from '../components/ReminderCenter'
 import { Avatar, Button, Pill, SectionHeading } from '../components/ui'
 import { addDays, formatMeals, localDigits, money, monthTitle, relativeDay, todayISO } from '../lib/format'
 import { round2 } from '../lib/calc'
 import { memberAvatar, memberName } from '../lib/ledger'
 import { useI18n, type MessageKey } from '../lib/i18n'
+import { questProgress, questStatus } from '../lib/quests'
 import type { BazarDuty } from '../lib/types'
 
 export function Dashboard() {
   const { ws, user, settlement, totals, cycle, cycleId, setCycleId, busy } = useApp()
   const { t } = useI18n()
+  const [questsOpen, setQuestsOpen] = useState(false)
 
   if (!ws || !user || !settlement || !cycle) return null
 
@@ -34,6 +38,15 @@ export function Dashboard() {
   const canManage = myRole === 'admin' || myRole === 'manager'
   const firstName = user.full_name.split(' ')[0]
   const today = todayISO()
+
+  // The board is onboarding, not furniture: once every quest is cleared it
+  // leaves the top of the page and only a quiet chip brings it back.
+  const questsCleared = questProgress(
+    questStatus(ws, cycle, today, {
+      deposits: me?.deposits ?? 0,
+      voted: ws.votes.some((vote) => vote.user_id === user.id),
+    }),
+  ).allClear
 
   // Every month this member can see belongs to them: an accounting app that
   // hides last quarter's ledger is asking to be distrusted.
@@ -99,8 +112,8 @@ export function Dashboard() {
             {ws.mess.name} · {monthTitle(cycle.month_label)} · {ws.mess.invite_code}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative min-w-0 flex-1 sm:flex-none">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:flex-none" data-tour="month">
             <select
               value={cycleId ?? ''}
               onChange={(event) => setCycleId(event.target.value)}
@@ -119,13 +132,25 @@ export function Dashboard() {
           >
             {t('dash.settlement')} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
+          {questsCleared && !questsOpen ? (
+            <button
+              type="button"
+              onClick={() => setQuestsOpen(true)}
+              data-tour="quests"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-xs font-bold text-brand-700 transition hover:bg-brand-100"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> {t('quest.reopen')}
+            </button>
+          ) : null}
         </div>
       </div>
 
-      <GettingStarted />
+      {questsCleared && !questsOpen ? null : (
+        <QuestBoard onHide={questsCleared ? () => setQuestsOpen(false) : undefined} />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card relative overflow-hidden bg-guild-hero p-4 text-white sm:p-5 lg:col-span-2">
+        <div className="card relative overflow-hidden bg-guild-hero p-4 text-white sm:p-5 lg:col-span-2" data-tour="balance">
           <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-300/20 blur-2xl" />
           <div className="relative flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -336,7 +361,7 @@ export function Dashboard() {
         </div>
       ) : null}
 
-      <div>
+      <div data-tour="members">
         <SectionHeading
           title={t('dash.memberBreakdown')}
           hint={t('dash.rateHint', {

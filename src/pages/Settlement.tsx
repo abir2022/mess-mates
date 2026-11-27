@@ -47,7 +47,7 @@ export function Settlement() {
 
   return (
     <div className="mx-auto max-w-4xl print-full">
-      <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+      <div className="no-print mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between" data-tour="settle-actions">
         <Link to="/" className="inline-flex min-h-11 items-center gap-1 self-start rounded-lg px-2 py-2 text-xs font-bold text-ink-500 hover:bg-ink-100">
           <ArrowLeft className="h-3.5 w-3.5" /> {t('nav.dashboard')}
         </Link>
@@ -93,7 +93,7 @@ export function Settlement() {
           </div>
         </header>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5" data-tour="settle-stats">
           {[
             { label: t('dash.totalMeals'), value: formatMeals(settlement.totalMeals) },
             { label: t('meals.approvedBazar'), value: money(settlement.totalBazar, symbol) },
@@ -109,7 +109,7 @@ export function Settlement() {
         </div>
 
         {/* Balances say what each member is owed; this says who actually hands money to whom. */}
-        <div className="mt-5 rounded-xl border border-ink-100 bg-ink-50/40 p-3 sm:p-4">
+        <div className="mt-5 rounded-xl border border-ink-100 bg-ink-50/40 p-3 sm:p-4" data-tour="settle-transfers">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-extrabold text-ink-900">{t('settle.transfers')}</p>

@@ -38,7 +38,7 @@ export function Arena() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="arena-points">
         <div>
           <p className="hud-kicker">{t('arena.kicker')}</p>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">{t('nav.arena')}</h1>
@@ -52,15 +52,17 @@ export function Arena() {
         ) : null}
       </div>
 
-      <Tabs
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'polls', label: t('arena.tabPolls'), icon: <Vote className="h-3.5 w-3.5" /> },
-          { id: 'games', label: t('arena.tabGames'), icon: <Gamepad2 className="h-3.5 w-3.5" /> },
-          { id: 'guild', label: t('arena.tabGuild'), icon: <Trophy className="h-3.5 w-3.5" /> },
-        ]}
-      />
+      <div data-tour="arena-tabs">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'polls', label: t('arena.tabPolls'), icon: <Vote className="h-3.5 w-3.5" /> },
+            { id: 'games', label: t('arena.tabGames'), icon: <Gamepad2 className="h-3.5 w-3.5" /> },
+            { id: 'guild', label: t('arena.tabGuild'), icon: <Trophy className="h-3.5 w-3.5" /> },
+          ]}
+        />
+      </div>
 
       {tab === 'polls' ? <PollsTab /> : null}
       {tab === 'games' ? <GamesTab /> : null}
@@ -116,7 +118,7 @@ function PollsTab() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-tour="arena-polls">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <SectionHeading title={t('arena.openBallots')} hint={t('arena.openBallotsHint')} />
         <Button size="sm" onClick={() => setOpen(true)}>

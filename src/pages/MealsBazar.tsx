@@ -117,22 +117,24 @@ export function MealsBazar() {
         </Pill>
       </div>
 
-      <Tabs
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'meals', label: t('meals.tabMeals'), icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
-          { id: 'bazar', label: t('meals.tabBazar'), icon: <Wallet className="h-3.5 w-3.5" /> },
-          { id: 'utilities', label: t('meals.tabUtilities'), icon: <CircleCheck className="h-3.5 w-3.5" /> },
-          { id: 'deposits', label: t('meals.tabDeposits'), icon: <Plus className="h-3.5 w-3.5" /> },
-        ]}
-      />
+      <div data-tour="meals-tabs">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'meals', label: t('meals.tabMeals'), icon: <UtensilsCrossed className="h-3.5 w-3.5" /> },
+            { id: 'bazar', label: t('meals.tabBazar'), icon: <Wallet className="h-3.5 w-3.5" /> },
+            { id: 'utilities', label: t('meals.tabUtilities'), icon: <CircleCheck className="h-3.5 w-3.5" /> },
+            { id: 'deposits', label: t('meals.tabDeposits'), icon: <Plus className="h-3.5 w-3.5" /> },
+          ]}
+        />
+      </div>
 
       {tab === 'meals' ? (
         <div className="space-y-4">
           <StandingPlanCard />
 
-          <div className="hud-panel p-3 sm:p-4">
+          <div className="hud-panel p-3 sm:p-4" data-tour="day-console">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <button
@@ -239,7 +241,7 @@ export function MealsBazar() {
             </p>
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-tour="squad">
             {activeMembers.map((member) => {
               const rowMeals = dayMeals.filter((meal) => meal.user_id === member.user_id)
               const rowTotal = rowMeals.reduce((sum, meal) => sum + mealTotal(meal), 0)

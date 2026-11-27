@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useEffect, useState, type ReactNode } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   AlarmClockCheck,
   CloudOff,
+  Compass,
   Crown,
   LayoutDashboard,
   LogOut,
@@ -15,7 +16,7 @@ import {
   Swords,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { Avatar, CopyButton, Pill } from './ui'
+import { Avatar, CopyButton } from './ui'
 import { bannerClass } from '../lib/backend'
 import { localDigits, monthTitle } from '../lib/format'
 import { useI18n, type MessageKey } from '../lib/i18n'
@@ -23,6 +24,8 @@ import { usePwaUpdate } from '../lib/pwa'
 import { LanguageToggle } from './LanguageToggle'
 import { ThemeToggle } from './ThemeToggle'
 import { StandingPlanAutoApply } from './StandingPlan'
+import { Tutorial } from './Tutorial'
+import { CAST_IMG, tourForPath, type TourId } from '../lib/tour'
 
 const navItems: { to: string; label: MessageKey; icon: typeof LayoutDashboard; end: boolean }[] = [
   { to: '/', label: 'nav.dashboard', icon: LayoutDashboard, end: true },
@@ -32,11 +35,37 @@ const navItems: { to: string; label: MessageKey; icon: typeof LayoutDashboard; e
   { to: '/settlement', label: 'dash.settlement', icon: Wallet, end: false },
 ]
 
+/**
+ * The guide is part of the shell, not a page: Mim's face sits in the rail and in
+ * the phone header, opens the tour for the screen you are on, and remembers the
+ * first-run walkthrough per mess on the device.
+ */
+function useGuide(messId: string) {
+  const location = useLocation()
+  const [tour, setTour] = useState<TourId | null>(null)
+  const screen = tourForPath(location.pathname)
+
+  useEffect(() => {
+    if (!messId || location.pathname !== '/') return
+    if (window.localStorage.getItem(`mm.tour.${messId}.dashboard`)) return
+    const timer = window.setTimeout(() => setTour('dashboard'), 900)
+    return () => window.clearTimeout(timer)
+  }, [messId, location.pathname])
+
+  const close = () => {
+    if (tour && messId) window.localStorage.setItem(`mm.tour.${messId}.${tour}`, 'done')
+    setTour(null)
+  }
+
+  return { tour, screen, open: () => setTour(screen), close }
+}
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { ws, user, cycle, signOut, notice, error, clearError, busy, online, pending, syncNow } =
     useApp()
   const { t } = useI18n()
   const { updateReady, reload, dismiss } = usePwaUpdate()
+  const guide = useGuide(ws?.mess.id ?? '')
   if (!ws || !user) return null
 
   const role = ws.members.find((member) => member.user_id === user.id)?.role ?? 'member'
@@ -46,19 +75,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="app-shell flex min-h-dvh flex-col md:flex-row">
       <StandingPlanAutoApply />
-      <aside className="no-print no-scrollbar sticky top-0 hidden h-dvh w-72 shrink-0 flex-col overflow-y-auto border-r border-ink-100 bg-white px-4 py-5 md:flex">
+      <aside className="app-rail no-print no-scrollbar sticky top-0 hidden h-dvh w-72 shrink-0 flex-col overflow-y-auto border-r border-white/10 px-4 py-5 text-white md:flex">
         <div className="flex items-center gap-3 px-2">
-          <img src="/logo.png" alt="Mess Mates" className="h-11 w-11 rounded-xl object-cover" />
+          <img src="/logo.png" alt="Mess Mates" className="h-11 w-11 rounded-xl object-cover ring-1 ring-white/20" />
           <div>
-            <p className="text-base font-extrabold tracking-tight text-ink-900">Mess Mates</p>
-            <p className="text-xs font-semibold text-ink-400">{t('app.tagline')}</p>
+            <p className="text-base font-extrabold tracking-tight text-white">Mess Mates</p>
+            <p className="text-xs font-semibold text-brand-200/70">{t('app.tagline')}</p>
           </div>
         </div>
 
-        <div className={`mt-5 overflow-hidden rounded-2xl bg-gradient-to-br ${bannerClass(ws.mess.guild_banner)} p-3.5 text-white`}>
+        <div className={`mt-5 overflow-hidden rounded-2xl bg-gradient-to-br ${bannerClass(ws.mess.guild_banner)} p-3.5 text-white shadow-[0_18px_36px_-26px_rgba(0,0,0,0.9)]`}>
           <div className="flex items-center justify-between">
             <span className="text-2xl leading-none">{ws.mess.guild_emblem}</span>
-            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+            <span className="rounded-full bg-black/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/85">
               {ws.mess.is_pro_mess ? t('layout.proGuild') : t('layout.guild')}
             </span>
           </div>
@@ -87,28 +116,42 @@ export function AppLayout({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
+        <button
+          type="button"
+          onClick={guide.open}
+          className="rail-link mt-2 w-full ring-1 ring-brand-400/25"
+        >
+          <span className="rail-icon overflow-hidden p-0">
+            <img src={CAST_IMG.mim} alt="" className="h-full w-full object-cover" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-left">{t('tour.help')}</span>
+          <Compass className="h-3.5 w-3.5 shrink-0 text-brand-300" />
+        </button>
+
         <div className="mt-auto space-y-3 pt-5">
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 [&_button]:border-white/15 [&_button]:bg-white/10 [&_button]:text-white/80">
             <ThemeToggle />
             <LanguageToggle />
           </div>
-          <div className="rounded-xl border border-ink-100 bg-ink-50/60 p-3">
-            <div className="flex items-center justify-between text-xs font-semibold text-ink-500">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <div className="flex items-center justify-between text-xs font-semibold text-white/60">
               <span className="inline-flex items-center gap-1">
                 <AlarmClockCheck className="h-3.5 w-3.5" /> {cycle ? monthTitle(cycle.month_label) : t('layout.noCycle')}
               </span>
-              <Pill tone={cycle?.status === 'open' ? 'brand' : 'neutral'}>{cycle?.status ?? '—'}</Pill>
+              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-200">
+                {cycle?.status ?? '—'}
+              </span>
             </div>
-            <p className="mt-1 text-xs text-ink-400">
+            <p className="mt-1 text-xs text-white/40">
               {t('layout.members', { count: activeMembers, role: roleLabel })}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 rounded-xl border border-ink-100 p-2.5">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2.5">
             <Avatar name={user.full_name} url={user.avatar_url} frame={user.avatar_frame} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-ink-800">{user.full_name}</p>
-              <p className="flex items-center gap-1 text-[11px] font-semibold text-brand-600">
+              <p className="truncate text-xs font-bold text-white">{user.full_name}</p>
+              <p className="flex items-center gap-1 text-[11px] font-semibold text-brand-300">
                 <Sparkles className="h-3 w-3" /> {user.xp_points} XP
               </p>
             </div>
@@ -117,38 +160,49 @@ export function AppLayout({ children }: { children: ReactNode }) {
               disabled={busy}
               title={t('common.signOut')}
               aria-label={t('common.signOut')}
-              className="rounded-lg p-2 text-ink-400 transition hover:bg-ink-100 hover:text-rose-500"
+              className="rounded-lg p-2 text-white/45 transition hover:bg-white/10 hover:text-rose-300"
             >
               <LogOut className="h-4 w-4" />
             </button>
           </div>
 
           {!ws.mess.is_pro_mess ? (
-            <div className="rounded-xl bg-gradient-to-br from-ink-900 to-brand-800 p-3 text-white">
-              <p className="flex items-center gap-1.5 text-xs font-bold">
-                <Crown className="h-3.5 w-3.5 text-amber-300" /> {t('layout.goPro')}
+            <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 p-3">
+              <p className="flex items-center gap-1.5 text-xs font-bold text-amber-200">
+                <Crown className="h-3.5 w-3.5" /> {t('layout.goPro')}
               </p>
-              <p className="mt-1 text-[11px] text-white/70">{t('layout.goProBody')}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-white/55">{t('layout.goProBody')}</p>
             </div>
           ) : null}
         </div>
       </aside>
 
       <div className="flex min-h-dvh w-full min-w-0 flex-col">
-        <header className="no-print sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-ink-100 bg-white/95 px-4 py-2.5 backdrop-blur md:hidden">
+        <header className="app-rail no-print sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5 text-white md:hidden">
           <div className="flex min-w-0 items-center gap-2.5">
-            <img src="/logo.png" alt="Mess Mates" className="h-9 w-9 rounded-lg object-cover" />
+            <img src="/logo.png" alt="Mess Mates" className="h-9 w-9 rounded-lg object-cover ring-1 ring-white/20" />
             <div className="min-w-0 leading-tight">
-              <p className="truncate text-sm font-extrabold text-ink-900">{ws.mess.name}</p>
-              <p className="truncate text-[11px] font-semibold text-ink-400">
+              <p className="truncate text-sm font-extrabold text-white">{ws.mess.name}</p>
+              <p className="truncate text-[11px] font-semibold text-white/55">
                 {ws.mess.guild_emblem} {localDigits(ws.mess.guild_points.toLocaleString())} pts
-
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5 [&_button]:border-white/15 [&_button]:bg-white/10 [&_button]:text-white/80">
             <ThemeToggle />
-            <LanguageToggle />
+            <LanguageToggle compactOnMobile />
+            <button
+              type="button"
+              onClick={guide.open}
+              title={t('tour.help')}
+              aria-label={t('tour.help')}
+              className="guide-orb relative h-9 w-9 shrink-0 rounded-full active:scale-95"
+            >
+              <img src={CAST_IMG.mim} alt="" className="guide-face h-full w-full object-cover" />
+              <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-white ring-2 ring-[#071923]">
+                <Compass className="h-2.5 w-2.5" />
+              </span>
+            </button>
             <Avatar name={user.full_name} url={user.avatar_url} frame={user.avatar_frame} size="sm" />
           </div>
         </header>
@@ -203,7 +257,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </main>
 
-        <nav className="app-nav no-print fixed inset-x-0 bottom-0 z-30 border-t border-ink-100 bg-white/95 backdrop-blur md:hidden">
+        <nav className="app-dock app-nav no-print fixed inset-x-0 bottom-0 z-30 border-t border-white/10 md:hidden">
           <div className="mx-auto flex max-w-md items-stretch justify-around px-1">
             {navItems.map((item) => (
               <NavLink
@@ -212,7 +266,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 end={item.end}
                 className={({ isActive }) =>
                   `flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-[11px] font-bold transition ${
-                    isActive ? 'text-brand-700' : 'text-ink-400'
+                    isActive ? 'text-brand-300' : 'text-white/50'
                   }`
                 }
               >
@@ -221,7 +275,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <span
                       className={`flex h-8 w-full max-w-[52px] items-center justify-center rounded-xl transition ${
                         isActive
-                          ? 'bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-[0_8px_16px_-10px_rgba(12,130,121,0.9)]'
+                          ? 'bg-gradient-to-br from-brand-400 to-brand-700 text-white shadow-[0_8px_16px_-8px_rgba(31,208,182,0.9)]'
                           : ''
                       }`}
                     >
@@ -251,6 +305,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
         ) : null}
       </div>
+
+      <Tutorial id={guide.tour ?? guide.screen} open={Boolean(guide.tour)} onClose={guide.close} />
     </div>
   )
 }

@@ -64,17 +64,19 @@ export function Hub() {
         <p className="mt-1 text-sm text-ink-500">{t('hub.subtitle')}</p>
       </div>
 
-      <Tabs
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { id: 'board', label: t('hub.tabBoard'), icon: <MessageSquare className="h-3.5 w-3.5" /> },
-          { id: 'roster', label: t('hub.tabRoster'), icon: <ShoppingBasket className="h-3.5 w-3.5" /> },
-          { id: 'council', label: t('gov.tab'), icon: <Vote className="h-3.5 w-3.5" /> },
-          { id: 'ledger', label: t('ledger.tab'), icon: <BookOpen className="h-3.5 w-3.5" /> },
-          { id: 'settings', label: t('hub.tabSettings'), icon: <Settings2 className="h-3.5 w-3.5" /> },
-        ]}
-      />
+      <div data-tour="hub-tabs">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: 'board', label: t('hub.tabBoard'), icon: <MessageSquare className="h-3.5 w-3.5" /> },
+            { id: 'roster', label: t('hub.tabRoster'), icon: <ShoppingBasket className="h-3.5 w-3.5" /> },
+            { id: 'council', label: t('gov.tab'), icon: <Vote className="h-3.5 w-3.5" /> },
+            { id: 'ledger', label: t('ledger.tab'), icon: <BookOpen className="h-3.5 w-3.5" /> },
+            { id: 'settings', label: t('hub.tabSettings'), icon: <Settings2 className="h-3.5 w-3.5" /> },
+          ]}
+        />
+      </div>
 
       {tab === 'board' ? <BoardTab /> : null}
       {tab === 'roster' ? <RosterTab /> : null}
@@ -109,7 +111,7 @@ function BoardTab() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <div className="hud-panel flex h-[calc(100dvh-15rem)] min-h-[26rem] flex-col lg:h-[70vh]">
+      <div className="hud-panel flex h-[calc(100dvh-15rem)] min-h-[26rem] flex-col lg:h-[70vh]" data-tour="hub-chat">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
           <div>
             <p className="hud-kicker">{t('hub.tabBoard')}</p>
@@ -201,7 +203,7 @@ function BoardTab() {
       </div>
 
       <div className="space-y-3">
-        <div className="hud-panel p-4">
+        <div className="hud-panel p-4" data-tour="hub-board-side">
           <SectionHeading title={t('hub.announcements')} hint={t('hub.announcementsHint')} />
           <div className="space-y-2">
             {ws.messages

@@ -10,6 +10,7 @@ import {
   Gamepad2,
   Mail,
   ShieldCheck,
+  Sparkles,
   Swords,
   Utensils,
   Vote,
@@ -19,6 +20,7 @@ import { Button, Pill } from '../components/ui'
 import { LedgerPanel } from '../components/LedgerPanel'
 import { LanguageToggle } from '../components/LanguageToggle'
 import { useI18n } from '../lib/i18n'
+import { SCENE_COPY } from './landing/sceneCopy'
 
 export function SplashScreen() {
   const { t } = useI18n()
@@ -34,7 +36,7 @@ export function SplashScreen() {
 
 export function AuthScreen() {
   const { backend, busy, signInWithGoogle, signInDemo, signInWithEmail, error } = useApp()
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const isDemo = backend.mode === 'demo'
   const [email, setEmail] = useState('')
   const [showEmail, setShowEmail] = useState(false)
@@ -102,6 +104,27 @@ export function AuthScreen() {
                 </li>
               ))}
             </ul>
+
+            {/* The two characters from the landing corridor greet the visitor
+                here, so the app has a face before the first ledger screen. */}
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              {(['rafi', 'mim'] as const).map((id) => {
+                const character = SCENE_COPY[lang].characters[id]
+                return (
+                  <div key={id} className="gate-cast">
+                    <img src={`/app/${id}.jpg`} alt={character.name} className="gate-cast-face" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-brand-200">
+                        {character.name} · {character.role}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-semibold leading-snug text-white/70">
+                        “{character.line}”
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
 
             <p className="mt-6 hidden items-center gap-2 text-[11px] font-semibold text-white/55 md:flex">
               <ShieldCheck className="h-4 w-4 shrink-0 text-brand-300" />
@@ -177,7 +200,12 @@ export function AuthScreen() {
               </p>
             ) : null}
 
-            <ul className="mt-5 space-y-1.5 border-t border-ink-100 pt-4 text-[11px] text-ink-500">
+            <p className="mt-4 flex items-start gap-1.5 rounded-xl bg-brand-50 px-3 py-2 text-[11px] font-semibold leading-relaxed text-brand-800">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-600" />
+              {t('auth.gateTour')}
+            </p>
+
+            <ul className="mt-4 space-y-1.5 border-t border-ink-100 pt-4 text-[11px] text-ink-500">
               {[t('auth.bullet1'), t('auth.bullet2'), t('auth.bullet3')].map((line) => (
                 <li key={line} className="flex items-start gap-1.5">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-500" />
@@ -229,7 +257,7 @@ export function OnboardingScreen() {
   const [currency, setCurrency] = useState('৳')
   const [code, setCode] = useState('')
   return (
-    <div className="min-h-dvh bg-ink-50">
+    <div className="app-shell min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-4xl flex-col px-4 py-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -251,11 +279,16 @@ export function OnboardingScreen() {
 
         <div className="mt-10 grid gap-5 md:grid-cols-2">
           <div className="md:col-span-2">
-            <h1 className="text-2xl font-extrabold text-ink-900">{t('auth.setupTitle')}</h1>
+            <p className="hud-kicker">{t('app.tagline')}</p>
+            <h1 className="mt-1 text-2xl font-extrabold text-ink-900">{t('auth.setupTitle')}</h1>
             <p className="mt-1 text-sm text-ink-500">{t('auth.setupBody')}</p>
+            <p className="mt-3 flex items-start gap-2 rounded-xl border border-brand-200/70 bg-white/70 px-3 py-2 text-[11px] font-semibold leading-relaxed text-ink-600">
+              <img src="/app/mim.jpg" alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+              <span className="mt-0.5">{t('auth.setupGuide')}</span>
+            </p>
           </div>
 
-          <div className="card p-5">
+          <div className="hud-panel p-5">
             <div className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                 <Crown className="h-4 w-4" />
@@ -308,7 +341,7 @@ export function OnboardingScreen() {
             </div>
           </div>
 
-          <div className="card p-5">
+          <div className="hud-panel p-5">
             <div className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-flame-50 text-flame-600">
                 <Dice5 className="h-4 w-4" />
@@ -360,7 +393,7 @@ export function OnboardingScreen() {
           {/* This screen is the only one a member sees between messes, so
               their own ledger has to live here: the months they left behind
               stay readable to them (and to that mess) for good. */}
-          <div className="md:col-span-2 rounded-2xl border border-ink-100 bg-white p-4">
+          <div className="hud-panel md:col-span-2 p-4">
             <LedgerPanel compact />
           </div>
         </div>

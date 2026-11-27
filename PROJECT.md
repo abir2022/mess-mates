@@ -892,12 +892,31 @@ Covered by five tests in `tests/calc.test.ts`: single payer, a member in credit 
 
 ### 24.2 First run and invites
 
-- `GettingStarted` (Dashboard) shows the four actions that decide whether a new mess sticks:
-  invite a mate, add fixed utilities, log today's meals, record the first bazar. Each row links to the
-  right screen, completed rows are struck through, and the card disappears when all four are done or
-  when the user hides it (`localStorage` key `mm.gettingStarted.<messId>`). The logic is a pure
-  function, `gettingStartedState(ws, cycle, today)` in `src/lib/gettingStarted.ts`, covered by six
-  tests in `tests/gettingStarted.test.ts`.
+- `QuestBoard` (Dashboard) turns the first run into six XP quests: log today's meals, record the
+  first bazar, deposit a share, vote in the arena, add fixed utilities and invite a messmate. Each
+  row links to the screen that clears it, completed rows are struck through, and the panel shows
+  banked/total XP plus a segmented progress bar. The quest list lives in `src/lib/quests.ts`
+  (`questStatus`, `questProgress`), so the Dashboard also knows when the board is finished: once all
+  six are cleared the panel leaves the top of the page and the header keeps one small
+  *Quests · all clear* chip that reopens it (and an X puts it away again). The first four come from
+  the pure `gettingStartedState(ws, cycle, today)` in `src/lib/gettingStarted.ts`, covered by six
+  tests in `tests/gettingStarted.test.ts`; the vote and deposit quests read the workspace and this
+  month's settlement.
+- A guided tour (`src/lib/tour.ts` + `src/components/Tutorial.tsx`) explains each screen through the
+  two landing characters — Rafi, the night owl, and Mim, the guild captain. Steps point at real
+  elements through `data-tour="…"` anchors on Dashboard, Meals, Arena, Hub and Settlement, so the
+  copy cannot drift away from the UI. The overlay dims the page, cuts the current target out of the
+  dimmer and draws the step as a speech card with Back / Next / Skip, Escape and arrow keys. Mim's
+  portrait is the help button in the sidebar and the phone header; the Dashboard tour opens once by
+  itself, and a finished tour is remembered under `mm.tour.<messId>.<screen>`. The Dashboard step
+  explains that a cleared board packs itself into that header chip, so a returning user who reopens
+  the tour still finds the first anchor where the copy says it is. Tour narration is
+  bilingual in `src/lib/tour.ts` (the same `Record<Lang, …>` pattern as the landing copy), while
+  short chrome strings live in `src/lib/i18n.ts`.
+- The shell carries the landing's night-corridor mood in its chrome only: a `.app-rail` sidebar and
+  `.app-dock` bottom bar in deep teal with a lit top edge, and Mim's face as the guide. Panels keep
+  the neutral `.card` / `.hud-panel` surfaces so screens stay readable and the settlement still
+  prints black on white.
 - `ShareButton` (ui.tsx) uses `navigator.share` where it exists — the OS sheet opens WhatsApp,
   Messenger or SMS on a phone — and falls back to the clipboard on desktop. Hub → Settings now offers
   **Share invite** next to the existing copy button, with the mess name, invite code and app URL in
