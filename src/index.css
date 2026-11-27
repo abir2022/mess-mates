@@ -338,6 +338,139 @@ html.dark [class~='text-emerald-800'] {
   }
 }
 
+/* ---- Comic landing ----------------------------------------------------
+   The landing is a printed comic in light mode and a late-night rooftop
+   issue in dark mode. Section colours live in variables so the header,
+   panels and borders switch together without rewriting each chapter. */
+/* `overflow-x: hidden` on an ancestor creates a scroll container and cancels
+   the landing's sticky header and boss stage. `clip` prevents sideways spill
+   without taking over the scroll. */
+body:has(.landing-page),
+body.landing-body {
+  overflow-x: clip;
+}
+
+.landing-page {
+  overflow-x: clip;
+  --lp-paper: #f4ecdb;
+  --lp-panel: #fffaf0;
+  --lp-ink: #0f2b3d;
+  --lp-muted: #526b79;
+  --lp-line: #0f2b3d;
+  --lp-line-soft: rgba(15, 43, 61, 0.18);
+  --lp-line-faint: rgba(15, 43, 61, 0.1);
+  --lp-soft: #e9ddc5;
+  --lp-shadow: #0f2b3d;
+  --lp-flame: #e94f0b;
+  --lp-gold: #f2b544;
+  background-color: var(--lp-paper);
+  color: var(--lp-ink);
+}
+
+html.dark .landing-page {
+  --lp-paper: #071923;
+  --lp-panel: #0e2c3a;
+  --lp-ink: #f4f7f9;
+  --lp-muted: #a4bbc9;
+  --lp-line: #2a566b;
+  --lp-line-soft: rgba(166, 188, 201, 0.2);
+  --lp-line-faint: rgba(166, 188, 201, 0.12);
+  --lp-soft: #0b2230;
+  --lp-shadow: #02090d;
+  --lp-flame: #ff7f37;
+  --lp-gold: #fcd34d;
+}
+
+.landing-page .comic-frame {
+  border: 3px solid var(--lp-line);
+  box-shadow: 8px 8px 0 var(--lp-shadow);
+}
+
+.landing-page .comic-halftone {
+  background-image: radial-gradient(var(--lp-line) 0.7px, transparent 0.7px);
+  background-size: 9px 9px;
+}
+
+.landing-page .speech-bubble {
+  position: relative;
+}
+
+.landing-page .speech-bubble::after {
+  content: '';
+  position: absolute;
+  left: 1.35rem;
+  bottom: -11px;
+  width: 16px;
+  height: 16px;
+  background: #f2b544;
+  border-right: 3px solid #0f2b3d;
+  border-bottom: 3px solid #0f2b3d;
+  transform: rotate(45deg);
+}
+
+.landing-page .hp-segments {
+  background-image: repeating-linear-gradient(90deg, transparent 0 14px, rgba(0, 0, 0, 0.3) 14px 16px);
+}
+
+.landing-page .confetti-piece {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 14px;
+  animation: landing-confetti 2.6s linear forwards;
+}
+
+@keyframes landing-confetti {
+  0% {
+    transform: translate3d(0, -20px, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(24px, 110vh, 0) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-page .comic-frame {
+    box-shadow: 5px 5px 0 var(--lp-shadow);
+  }
+}
+
+/* ---- 3D corridor ------------------------------------------------------
+   A tall scroll track gives the scene room to walk. The sticky stage keeps
+   the canvas on screen while the camera travels from the entry door to the
+   ledger portal; `clip` (not `hidden`) keeps the sticky child alive. */
+.hostel3d-track {
+  min-height: 320vh;
+  scroll-margin-top: 72px;
+}
+
+.hostel3d-sticky {
+  isolation: isolate;
+}
+
+.hostel3d-track canvas {
+  touch-action: pan-y;
+}
+
+@media (max-width: 767px) {
+  .hostel3d-track {
+    min-height: 290vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hostel3d-track {
+    min-height: 100dvh;
+  }
+  .hostel3d-sticky {
+    position: relative;
+    top: auto;
+    height: calc(100dvh - 66px);
+  }
+}
+
 @page {
   size: A4 portrait;
   margin: 10mm;
